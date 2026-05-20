@@ -1,4 +1,5 @@
 const emergencyRequest = require("../models/emergencyRequest.js");
+const { getIo } = require('../sockets/socket.js');
 
 const createEmergencyRequest = async (req, res) => {
     try {
@@ -13,6 +14,9 @@ const createEmergencyRequest = async (req, res) => {
             emergencyType,
             pickupLocation
         });
+
+        const io = getIo();
+        io.emit("emergencyRequest", request);
 
         res.status(201).json({
             message: "Emergency request created",
@@ -143,6 +147,10 @@ const updateEmergencyStatus = async (req, res) =>{
         request.status = status;
 
         await request.save();
+
+        const io = getIo();
+        
+        io.emit("emergencyStatusUpdated", request);
 
         res.status(200).json({
             message: "Emergency status updated"

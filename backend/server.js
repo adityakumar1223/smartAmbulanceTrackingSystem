@@ -3,11 +3,19 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/database.js");
 
+//adding for socket io
+const http = require('http');
+const { Server } = require('socket.io');
+const  { initializeSocket } = require("./sockets/socket.js");
+
+
 require('dotenv').config();
 
 connectDB();
 
 const app = express();
+
+
 
 const port = process.env.PORT;
 
@@ -34,8 +42,28 @@ app.get("/", (req, res)=>{
 })
 
 
+//socket line
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+    },
+});
 
-app.listen(port, (req, res)=>{
+initializeSocket(io);
+
+io.on("connection", (socket) => {
+    
+    console.log("connected", socket.id);
+
+    socket.on("driverLocationUpdate", (data)=> {
+        console.log("Live Driver Location", data);
+        io.emit("driverLocationUpdated", data);
+    });
+});
+
+
+server.listen(port, ()=>{
     console.log(`Backend is runningon port ${port}`);
 });
 

@@ -92,6 +92,7 @@ For quick system evaluation, use these pre-configured accounts in the database. 
    ```env
    VITE_GOOGLE_MAPS_API_KEY=AIzaSyCycsmSElR7DrZ-e6eEPxSZgNTwHQOx_d4
    VITE_ORS_API_KEY=eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImIwMjM5YmE5YTZmZDRkOWQ4MTZiYWZmOTU1YWE1NjM0IiwiaCI6Im11cm11cjY0In0=
+   VITE_API_URL=https://smartambulancetrackingsystem.onrender.com
    ```
 4. Spin up the Vite local server:
    ```bash
@@ -133,6 +134,9 @@ Here is a summary of crucial bugs fixed and structural refactorings made to brin
 9. **Global Sidebar Brand Header Overflow:**
    - *Issue:* A rigid global `h1` style override in `index.css` forced sidebar brand logos to be excessively large, pushing the brand name ("SmartAmbulance") out of the sidebar container width and causing ugly text wrapping on desktop viewports.
    - *Fix:* Cleaned up global tag-level font sizes and refactored sidebar headers to semantic, flexible `span` block elements with responsive CSS sizing across all dashboards.
+10. **Production API & WebSocket Dynamic Routing Integration:**
+    - *Issue:* The API connection base URL (`api.js`) and the Socket.io client connection endpoint (`socket.js`) were hardcoded to `"http://localhost:5000"`. This made production deployments (e.g., deploying the backend to Render at `https://smartambulancetrackingsystem.onrender.com`) fail to establish a connection without manually rewriting system code files.
+    - *Fix:* Refactored both configurations to dynamically load `import.meta.env.VITE_API_URL` as the primary connection address with a stable fallback to localhost for seamless offline local development.
 
 ---
 

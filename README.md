@@ -122,8 +122,38 @@ Here is a summary of crucial bugs fixed and structural refactorings made to brin
    - *Issue:* The paramedic dashboard sent GPS updates using event `"Driver Location upadte: "` (misspelled with trailing whitespace and colons), while the server was listening to `"driverLocationUpdate"`. This caused live coordinates to be dropped.
    - *Fix:* Corrected WebSocket event names and implemented clean watch geolocation cleanup hooks on component unmount.
 6. **Tailwind CSS v4 Integration:**
-   - *Issue:* Tailwind was listed as a dependency but was missing in `vite.config.js` and was never imported into the stylesheets. Additionally, a rigid `#root` width block in `index.css` limited the screen width to `1126px` with inner borders.
-   - *Fix:* Integrated `@tailwindcss/vite` plugin, imported `@import "tailwindcss";` in `index.css`, and removed the layout squeeze to create full-width dashboards.
+    - *Issue:* Tailwind was listed as a dependency but was missing in `vite.config.js` and was never imported into the stylesheets. Additionally, a rigid `#root` width block in `index.css` limited the screen width to `1126px` with inner borders.
+    - *Fix:* Integrated `@tailwindcss/vite` plugin, imported `@import "tailwindcss";` in `index.css`, and removed the layout squeeze to create full-width dashboards.
+7. **Leaflet Coordinate Crash Avoidance:**
+   - *Issue:* React Leaflet threw an unhandled render exception that took down the entire React application tree (causing a blank screen) if `<MapContainer center={...}>` or `<Marker position={...}>` received coordinates resolving to `NaN` or `undefined` (which happened when active dispatches had empty coordinate arrays, creating a `{ lat: NaN, lng: NaN }` patientLocation object).
+   - *Fix:* Integrated bulletproof coordinate validation flags (`hasValidAmbulanceCoords` and `hasValidPatientCoords`) into [MapComponent.jsx](file:///d:/internship/collegeInternship/smartAmbulanceTrackingSystem/frontend/src/components/map/MapComponent.jsx) to insulate markers, lines, and map containers. Added dynamic centering fallbacks (Ambulance ➔ Patient ➔ Patna, India) and wrapped all Leaflet markers/polylines in rendering guards.
+8. **Page-Reload Blank Dashboard Crash (Race Condition):**
+   - *Issue:* Reloading the browser while on the Driver Dashboard immediately crashed the view and showed a blank screen. This was caused by a race condition between `ProtectedRoute.jsx` (which synchronously read credentials from `localStorage`) and `AuthContext.jsx` (which initialized `user` as `null` and parsed profile data asynchronously in a `useEffect` hook). This caused the dashboard to render with `user = null` on the first frame, crashing on `user.id` inside the GPS hook's dependency array.
+   - *Fix:* Destructured `authLoading` from `useAuth()`, applied optional chaining `user?.id` inside both the geolocation coordinates callback and the hook dependency list, and placed a sleek glassmorphic early loading guard (`if (authLoading || !user)`) at the end of the hook block to ensure perfect startup sync.
+9. **Global Sidebar Brand Header Overflow:**
+   - *Issue:* A rigid global `h1` style override in `index.css` forced sidebar brand logos to be excessively large, pushing the brand name ("SmartAmbulance") out of the sidebar container width and causing ugly text wrapping on desktop viewports.
+   - *Fix:* Cleaned up global tag-level font sizes and refactored sidebar headers to semantic, flexible `span` block elements with responsive CSS sizing across all dashboards.
+
+---
+
+## 🌟 Newly Developed Premium Features
+
+### 1. High-Fidelity Community Hub & Road Hazards Bulletin (`/community`)
+We have developed a comprehensive, real-time shared Community Center designed to keep emergency networks aligned, connected, and safe:
+- **Shared Access Routing:** Registered a secure, protected `/community` route accessible by all roles (Patients, Paramedics, Hospitals, Admins), featuring dedicated sidebar navigation links.
+- **Interactive Stream Feed:** Allows users to share route updates or announcements, attach screenshots using a raw local `FileReader` Base64 parser, like posts, and expand comment threads to interact in real-time.
+- **Suggested Medical Network:** A connections sidebar where paramedics and medical staff can click "Connect" to send requests. It exhibits a simulated synchronization lifecycle state ("Connect" ➔ "Syncing..." ➔ "Connected") with perfect client-side local caching.
+- **Active Road Hazards Board:** A tactical route-safety bullet board where users can report potholes, construction, flooding, or road blocks with specific severity tags (`low`, `medium`, `critical`) and descriptions. The board dynamically upvotes safety reports and **automatically sorts incidents so that the most severe, highly-voted blockages bubble instantly to the top**, alerting incoming ambulance rigs in real-time.
+- **State Persistence:** Integrated robust `localStorage` state adapters across the social stream, network directory, and hazard bulletin, preserving data seamlessly across browser updates.
+
+### 2. Always-On Live Sidebar GPS Radar Maps
+We integrated high-tech, live GPS tracking radars directly into the desktop sidebars of both **Patient** and **Driver** dashboards:
+- **Patient Sidebar Radar:** Continuously polls telemetry coordinates, displaying a glowing emerald green pulsar indicating active GPS and printed monospaced lat/lng badges.
+- **Driver State Machine Radar:** Synchronizes directly with the driver's online presence:
+  - **Offline cover overlay:** If offline, hides the map and displays a beautiful, blurred glass cover with a flashing "Radar Offline" alert, encouraging them to toggle online to broadcast their location.
+  - **Calibrating state:** Displays a glowing "📡 Calibrating GPS..." banner when toggling online while geolocation permissions or signals are resolving.
+  - **Online live radar:** Once active, displays a high-contrast dark military-radar centered on their live coordinates.
+- **Premium Dark Cybernetic Tile Styling:** Applied custom CSS matrix shifts (`filter: invert(90%) hue-rotate(180deg)...`) to convert standard map canvases into a gorgeous glowing dark-theme tactical display.
 
 ---
 

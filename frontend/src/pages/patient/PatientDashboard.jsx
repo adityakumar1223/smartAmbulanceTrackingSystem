@@ -11,7 +11,7 @@ import {
   FiActivity, FiUser, FiMapPin, FiPhoneCall, FiUsers, 
   FiAlertTriangle, FiPlus, FiThumbsUp, FiMessageCircle, FiSend, 
   FiImage, FiX, FiCheck, FiUserPlus, FiInfo, FiClock, FiSettings,
-  FiFileText, FiChevronRight, FiCheckCircle, FiCompass
+  FiFileText, FiChevronRight, FiCheckCircle, FiCompass, FiMenu
 } from "react-icons/fi";
 
 // Initial Seed Data for the Social Feed (matches standalone Community page)
@@ -493,15 +493,15 @@ function PatientDashboard() {
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="p-1 text-gray-400 hover:text-white transition"
         >
-          <FiSettings className="w-5 h-5" />
+          {mobileMenuOpen ? <FiX className="w-5 h-5" /> : <FiMenu className="w-5 h-5" />}
         </button>
 
         {mobileMenuOpen && (
-          <div className="absolute right-6 top-16 bg-[#161a23] border border-gray-800 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50">
+          <div className="absolute right-6 top-16 bg-[#161a23]/95 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50">
             <button
               onClick={() => { setActiveTab("community"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "community" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "community" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiUsers className="w-3.5 h-3.5" />
@@ -509,8 +509,8 @@ function PatientDashboard() {
             </button>
             <button
               onClick={() => { setActiveTab("map"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "map" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "map" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiMapPin className="w-3.5 h-3.5" />
@@ -518,8 +518,8 @@ function PatientDashboard() {
             </button>
             <button
               onClick={() => { setActiveTab("profile"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "profile" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "profile" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiUser className="w-3.5 h-3.5" />
@@ -527,8 +527,8 @@ function PatientDashboard() {
             </button>
             <button
               onClick={() => { setActiveTab("location"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "location" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "location" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiCompass className="w-3.5 h-3.5" />
@@ -551,8 +551,17 @@ function PatientDashboard() {
             ==================================================== */}
         {activeTab === "map" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start animate-fadeIn">
+            {/* Main dispatch/booking active screen viewport */}
+            <div className="lg:col-span-2 order-first lg:order-none">
+              {activeEmergency ? (
+                <ActiveTripCard />
+              ) : (
+                <EmergencyForm />
+              )}
+            </div>
+
             {/* Sidebar quick metadata widgets (Patient overview) */}
-            <div className="space-y-6">
+            <div className="space-y-6 order-last lg:order-none">
               {/* Welcome card */}
               <div className="bg-gradient-to-br from-[#161a23] to-[#1a1f2c] border border-gray-800 p-6 rounded-2xl shadow-xl shadow-black/40">
                 <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-400">
@@ -604,19 +613,10 @@ function PatientDashboard() {
                 >
                   <FiPhoneCall className="w-4.5 h-4.5" />
                 </a>
-              </div>
-            </div>
-
-            {/* Main dispatch/booking active screen viewport */}
-            <div className="lg:col-span-2">
-              {activeEmergency ? (
-                <ActiveTripCard />
-              ) : (
-                <EmergencyForm />
-              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* ====================================================
             VIEWPORT B: EMBEDDED COMMUNITY TABS (Unified Layout)
@@ -1170,7 +1170,7 @@ function PatientDashboard() {
             </div>
 
             {/* Live Leaflet Map Container */}
-            <div className="rounded-3xl overflow-hidden border border-gray-800 h-[500px] relative z-0 shadow-2xl">
+            <div className="rounded-3xl overflow-hidden border border-gray-800 h-[40vh] sm:h-[50vh] md:h-[500px] relative z-0 shadow-2xl">
               {gpsError && (
                 <div className="absolute inset-0 bg-[#0e1015]/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center">
                   <FiAlertTriangle className="w-12 h-12 text-yellow-500 mb-4 animate-bounce" />

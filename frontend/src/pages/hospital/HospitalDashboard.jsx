@@ -7,7 +7,7 @@ import LogoutButton from "../../components/LogoutButton.jsx";
 import { 
   FiActivity, FiTruck, FiUsers, FiCompass, FiAlertCircle, FiSettings,
   FiInfo, FiFileText, FiClock, FiImage, FiX, FiThumbsUp, FiMessageCircle,
-  FiSend, FiUserPlus, FiUser, FiMapPin
+  FiSend, FiUserPlus, FiUser, FiMapPin, FiMenu
 } from "react-icons/fi";
 
 // Initial Seed Data for the Social Feed
@@ -454,13 +454,17 @@ function HospitalDashboard() {
 
         <button 
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1 text-gray-400 hover:text-white transition"
+          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800/40 rounded-xl transition cursor-pointer"
         >
-          <FiSettings className="w-5 h-5" />
+          {mobileMenuOpen ? (
+            <FiX className="w-5 h-5" />
+          ) : (
+            <FiMenu className="w-5 h-5" />
+          )}
         </button>
 
         {mobileMenuOpen && (
-          <div className="absolute right-6 top-16 bg-[#161a23] border border-gray-800 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50">
+          <div className="absolute right-6 top-16 bg-[#161a23]/95 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50 animate-fadeIn">
             <button
               onClick={() => { setActiveTab("community"); setMobileMenuOpen(false); }}
               className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
@@ -882,8 +886,8 @@ function HospitalDashboard() {
                       <th className="py-3 px-4">Trauma priority</th>
                       <th className="py-3 px-4">Patient Name</th>
                       <th className="py-3 px-4">En Route Status</th>
-                      <th className="py-3 px-4">Triage Notes</th>
-                      <th className="py-3 px-4">Report Time</th>
+                      <th className="py-3 px-4 hidden md:table-cell">Triage Notes</th>
+                      <th className="py-3 px-4 hidden sm:table-cell">Report Time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/40 text-xs">
@@ -918,10 +922,10 @@ function HospitalDashboard() {
                               {req.status.replace("_", " ")}
                             </span>
                           </td>
-                          <td className="py-4 px-4 max-w-xs truncate italic text-gray-400">
+                          <td className="py-4 px-4 max-w-xs truncate italic text-gray-400 hidden md:table-cell">
                             "{req.patientNotes || "No condition notes logged."}"
                           </td>
-                          <td className="py-4 px-4 text-gray-500">{new Date(req.createdAt).toLocaleTimeString()}</td>
+                          <td className="py-4 px-4 text-gray-500 hidden sm:table-cell">{new Date(req.createdAt).toLocaleTimeString()}</td>
                         </tr>
                       ))
                     )}

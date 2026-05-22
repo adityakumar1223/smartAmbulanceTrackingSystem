@@ -14,7 +14,7 @@ import {
   FiActivity, FiUser, FiWifi, FiWifiOff, FiAlertCircle, FiClock,
   FiUsers, FiAlertTriangle, FiThumbsUp, FiMessageCircle, FiSend, 
   FiImage, FiX, FiCheck, FiUserPlus, FiInfo, FiSettings, FiFileText, 
-  FiChevronRight, FiMapPin, FiTruck
+  FiChevronRight, FiMapPin, FiTruck, FiMenu
 } from "react-icons/fi";
 
 // Initial Seed Data for the Social Feed
@@ -590,15 +590,15 @@ function DriverDashboard() {
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="p-1 text-gray-400 hover:text-white transition"
         >
-          <FiSettings className="w-5 h-5" />
+          {mobileMenuOpen ? <FiX className="w-5 h-5" /> : <FiMenu className="w-5 h-5" />}
         </button>
 
         {mobileMenuOpen && (
-          <div className="absolute right-6 top-16 bg-[#161a23] border border-gray-800 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50">
+          <div className="absolute right-6 top-16 bg-[#161a23]/95 backdrop-blur-xl border border-gray-800/80 rounded-2xl p-4 w-52 shadow-2xl flex flex-col gap-2 z-50">
             <button
               onClick={() => { setActiveTab("community"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "community" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "community" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiUsers className="w-3.5 h-3.5" />
@@ -606,8 +606,8 @@ function DriverDashboard() {
             </button>
             <button
               onClick={() => { setActiveTab("cockpit"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "cockpit" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "cockpit" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiWifi className="w-3.5 h-3.5" />
@@ -615,8 +615,8 @@ function DriverDashboard() {
             </button>
             <button
               onClick={() => { setActiveTab("stats"); setMobileMenuOpen(false); }}
-              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 ${
-                activeTab === "stats" ? "bg-red-500/10 text-red-400" : "text-gray-400"
+              className={`py-2 px-3 rounded-lg text-left text-xs font-semibold uppercase flex items-center gap-2 transition ${
+                activeTab === "stats" ? "bg-red-500/10 text-red-400 font-bold" : "text-gray-400 hover:text-white"
               }`}
             >
               <FiActivity className="w-3.5 h-3.5" />
@@ -1021,37 +1021,8 @@ function DriverDashboard() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
                 
-                {/* Geolocation Status Widget */}
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-[#161a23] border border-gray-800 p-6 rounded-2xl shadow-xl space-y-4">
-                    <h3 className="text-white font-bold text-xs tracking-wider uppercase">Paramedic Status</h3>
-                    
-                    {isOnline ? (
-                      <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-xs flex gap-3">
-                        <FiWifi className="w-5 h-5 flex-shrink-0 animate-bounce text-green-400" />
-                        <div>
-                          <h4 className="font-bold">GPS Transmitter Active</h4>
-                          <p className="text-gray-500 mt-1.5 leading-relaxed">
-                            Your ambulance coordinates are broadcasting live. You will receive critical emergency alerts instantly.
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 rounded-xl text-xs flex gap-3">
-                        <FiWifiOff className="w-5 h-5 flex-shrink-0 text-yellow-500" />
-                        <div>
-                          <h4 className="font-bold">Transmitter Offline</h4>
-                          <p className="text-gray-500 mt-1.5 leading-relaxed">
-                            Toggle your status to ONLINE to synchronize geolocation coordinates and claim incoming emergency missions.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {/* Pending Emergency Requests Incident Pool */}
-                <div className="lg:col-span-2 bg-[#161a23] border border-gray-800 p-6 rounded-2xl shadow-xl space-y-6">
+                <div className="lg:col-span-2 bg-[#161a23] border border-gray-800 p-6 rounded-2xl shadow-xl space-y-6 order-first lg:order-none">
                   <div className="flex justify-between items-center border-b border-gray-800 pb-4">
                     <h2 className="text-sm font-bold text-white uppercase tracking-wider">Pending Incident Dispatch Pool</h2>
                     <span className="px-2.5 py-0.5 bg-[#1e2330] border border-gray-800 rounded-lg text-[10px] font-bold text-gray-400">
@@ -1098,6 +1069,35 @@ function DriverDashboard() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Geolocation Status Widget */}
+                <div className="lg:col-span-1 space-y-6 order-last lg:order-none">
+                  <div className="bg-[#161a23] border border-gray-800 p-6 rounded-2xl shadow-xl space-y-4">
+                    <h3 className="text-white font-bold text-xs tracking-wider uppercase">Paramedic Status</h3>
+                    
+                    {isOnline ? (
+                      <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-xs flex gap-3">
+                        <FiWifi className="w-5 h-5 flex-shrink-0 animate-bounce text-green-400" />
+                        <div>
+                          <h4 className="font-bold">GPS Transmitter Active</h4>
+                          <p className="text-gray-500 mt-1.5 leading-relaxed">
+                            Your ambulance coordinates are broadcasting live. You will receive critical emergency alerts instantly.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 rounded-xl text-xs flex gap-3">
+                        <FiWifiOff className="w-5 h-5 flex-shrink-0 text-yellow-500" />
+                        <div>
+                          <h4 className="font-bold">Transmitter Offline</h4>
+                          <p className="text-gray-500 mt-1.5 leading-relaxed">
+                            Toggle your status to ONLINE to synchronize geolocation coordinates and claim incoming emergency missions.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
               </div>

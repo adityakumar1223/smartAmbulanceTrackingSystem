@@ -143,7 +143,7 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
     }, [ambulanceLocation, patientLocation, hasValidAmbulanceCoords, hasValidPatientCoords]);
 
     return ( 
-        <div style={{ position: "relative", width: "100%", height: "65vh" }}>
+        <div className="relative w-full h-[40vh] sm:h-[50vh] md:h-[65vh] z-0">
         
         {/* Glassmorphic Diagnostics Console */}
         <div

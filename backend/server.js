@@ -60,6 +60,11 @@ io.on("connection", (socket) => {
         console.log("Live Driver Location", data);
         io.emit("driverLocationUpdated", data);
     });
+
+    socket.on("patientLocationUpdate", (data)=> {
+        console.log("Live Patient Location", data);
+        io.emit("patientLocationUpdated", data);
+    });
 });
 
 

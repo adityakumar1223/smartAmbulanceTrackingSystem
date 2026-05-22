@@ -1,7 +1,7 @@
 import MapComponent from "../../components/map/MapComponent";
 import { FiAlertCircle, FiChevronRight, FiNavigation, FiXCircle, FiCheckSquare } from "react-icons/fi";
 
-const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation }) => {
+const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation, patientLiveLocation }) => {
   if (!trip) return null;
 
   const handleNextStatus = async () => {
@@ -122,7 +122,12 @@ const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation }) => {
         </h3>
         <div className="rounded-3xl overflow-hidden border border-gray-800 relative z-0">
           <MapComponent
-            pickupLocation={trip.pickupLocation}
+            pickupLocation={
+              patientLiveLocation ? {
+                type: "Point",
+                coordinates: [patientLiveLocation.lng, patientLiveLocation.lat]
+              } : trip.pickupLocation
+            }
             driverLocation={driverLocation}
             dropoffLocation={trip.dropoffLocation}
           />

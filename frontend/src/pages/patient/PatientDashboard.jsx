@@ -5,6 +5,7 @@ import EmergencyForm from "./EmergencyForm.jsx";
 import ActiveTripCard from "./ActiveTripCard.jsx";
 import { useEmergency } from "../../context/EmergencyContext";
 import { useAuth } from "../../context/AuthContext";
+import socket from "../../socket/socket.js";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { 
@@ -132,6 +133,24 @@ function PatientDashboard() {
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  // Broadcast patient live location to assigned driver
+  useEffect(() => {
+    if (
+      activeEmergency &&
+      ["accepted", "on_the_way", "arrived"].includes(activeEmergency.status) &&
+      userLocation
+    ) {
+      const payload = {
+        emergencyId: activeEmergency._id,
+        patientId: user?.id,
+        lat: userLocation.lat,
+        lng: userLocation.lng
+      };
+      socket.emit("patientLocationUpdate", payload);
+      console.log("Patient live location emitted via WebSockets:", payload);
+    }
+  }, [userLocation, activeEmergency, user?.id]);
 
   // ----------------------------------------------------
   // TABS STATE: PROFILE

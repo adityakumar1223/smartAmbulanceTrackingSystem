@@ -101,6 +101,7 @@ function DriverDashboard() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [incomingRequestAlert, setIncomingRequestAlert] = useState(null);
   const [driverLocation, setDriverLocation] = useState(null);
+  const [patientLiveLocation, setPatientLiveLocation] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const watchIdRef = useRef(null);
@@ -395,12 +396,30 @@ function DriverDashboard() {
       }
     });
 
+    socket.on("patientLocationUpdated", (locationData) => {
+      console.log("Patient live location updated received:", locationData);
+      if (activeTrip && locationData.emergencyId === activeTrip._id) {
+        setPatientLiveLocation({
+          lat: locationData.lat,
+          lng: locationData.lng
+        });
+      }
+    });
+
     return () => {
       socket.off("emergencyRequest");
       socket.off("emergencyStatusUpdated");
       socket.off("emergencyAccepted");
+      socket.off("patientLocationUpdated");
     };
   }, [isOnline, activeTrip, incomingRequestAlert]);
+
+  // Clear patient live location when active trip ends
+  useEffect(() => {
+    if (!activeTrip) {
+      setPatientLiveLocation(null);
+    }
+  }, [activeTrip]);
 
   // Action: Accept mission
   const handleAcceptMission = async (requestId) => {
@@ -1017,6 +1036,7 @@ function DriverDashboard() {
                 onUpdateStatus={handleUpdateTripStatus}
                 loading={loading}
                 driverLocation={driverLocation}
+                patientLiveLocation={patientLiveLocation}
               />
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">

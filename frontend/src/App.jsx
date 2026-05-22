@@ -11,6 +11,9 @@ import HospitalDashboard from './pages/hospital/HospitalDashboard.jsx';
 import LiveTracking from './components/map/LiveTracking.jsx';
 import ProtectedRoute from './routes/ProtectedRoute.jsx';
 import Login from "./pages/Login.jsx";
+import Register from "./pages/Register.jsx";
+import Community from "./pages/Community.jsx";
+
 
 function App() {
 
@@ -26,6 +29,22 @@ function App() {
         element={<Login />}
         
         />
+
+        <Route 
+        path="/register"
+        element={<Register />}
+        />
+
+        <Route 
+        path="/community"
+        element={
+          <ProtectedRoute>
+            <Community />
+          </ProtectedRoute>
+        }
+        />
+
+
 
         <Route 
         path='/patient'

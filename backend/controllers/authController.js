@@ -6,12 +6,23 @@ const registerUser = async(req , res) =>{
 
     try {
         const { name, username, email, password, role, dob  } = req.body;
-        const existingUser = await User.findOne({email});
-
-        if(existingUser){
+        
+        // 1. Check for duplicate email
+        const existingEmail = await User.findOne({ email });
+        if(existingEmail){
             return res.status(400).json({
-                message: "User already exists",
+                message: "Email is already registered",
             });
+        }
+
+        // 2. Check for duplicate username
+        if (username) {
+            const existingUsername = await User.findOne({ username });
+            if (existingUsername) {
+                return res.status(400).json({
+                    message: "Username is already taken",
+                });
+            }
         }
 
         const hashedPassword = await bcrypt.hash(password, 8);
@@ -26,7 +37,7 @@ const registerUser = async(req , res) =>{
         });
 
         res.status(201).json({
-            message: "User registered sucessfully",
+            message: "User registered successfully",
         })
 
     } catch (error) {
@@ -53,7 +64,7 @@ const loginUser = async(req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
 
         if(!isMatch){
-            return res.statis(400).json({
+            return res.status(400).json({
                 message: "password incorrect",
             });
         }

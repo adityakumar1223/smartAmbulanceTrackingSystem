@@ -1,17 +1,6 @@
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-    
-    avatar: {
-        type:{
-            url: String,
-            localPath: String,
-        },
-        default:{
-            url: `https://placehold.co/200x200`,
-            localPath: ``,
-        }
-    },
 
     name:{
         type: String,
@@ -47,11 +36,32 @@ const userSchema = new mongoose.Schema({
         default: "patient",
     },
 
+    isAvailable: {
+        type: Boolean,
+        default: false
+    },
+
+    currentLocation:{
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point',
+        },
+        coordinates:{
+            type: [Number],
+            default: [0,0],
+        }
+    },
+
+    activeEmergencyId:{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'EmergencyRequest',
+        default:null,
+    },
+
     dob:{
         type: Date,
-        required: [true, "Date of birth is required"],
-        trim: true,
-
+        required: false,
     },
 
     refreshToken: {
@@ -73,6 +83,8 @@ const userSchema = new mongoose.Schema({
         emailVerificationExpiry: {
             type: Date,
     },
-});
+}, {timestamps: true});
+
+userSchema.index({currentLocation: '2dsphere'});
 
 module.exports = mongoose.model("User", userSchema);

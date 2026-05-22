@@ -12,17 +12,30 @@ import { useEffect, useState } from 'react';
 import socket from '../../socket/socket';
 
 
-function MapComponent(){
+function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
 
-    const patientLocation = {
-     lat: 25.610,
-    lng: 85.158,
-    };
+    const patientLocation = (pickupLocation && Array.isArray(pickupLocation.coordinates) && pickupLocation.coordinates.length >= 2) ? {
+        lat: Number(pickupLocation.coordinates[1]),
+        lng: Number(pickupLocation.coordinates[0])
+     } : null;
 
-    const [ambulanceLocation, setAmbulanceLocation] = useState({
-    lat: 25.591,
-    lng: 85.1376
+    const [ambulanceLocation, setAmbulanceLocation] = useState(driverLocation || {
+        lat: 25.591,
+        lng: 85.1376
     });
+
+    // Bulletproof coordinate validation
+    const hasValidAmbulanceCoords = ambulanceLocation && 
+        typeof ambulanceLocation.lat === "number" && 
+        typeof ambulanceLocation.lng === "number" && 
+        !isNaN(ambulanceLocation.lat) && 
+        !isNaN(ambulanceLocation.lng);
+
+    const hasValidPatientCoords = patientLocation && 
+        typeof patientLocation.lat === "number" && 
+        typeof patientLocation.lng === "number" && 
+        !isNaN(patientLocation.lat) && 
+        !isNaN(patientLocation.lng);
 
     const [eta, setEta] = useState(null);
     const [distance, setDistance] = useState(null);
@@ -44,6 +57,8 @@ function MapComponent(){
 
   });
 
+
+
   return () => {
 
     socket.off("driverLocationUpdated");
@@ -52,12 +67,19 @@ function MapComponent(){
 
 }, []);
 
+    useEffect(() => {
+        if(driverLocation){
+            setAmbulanceLocation(driverLocation);
+        }
+    }, [driverLocation]);
+
     // ORS use effect
     useEffect(() => {
         const fetchRoute = async () => {
 
             try {
 
+                if (!hasValidPatientCoords || !hasValidAmbulanceCoords) return;
                 const response = await fetch(
 
                     `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${
@@ -66,7 +88,7 @@ function MapComponent(){
                         ambulanceLocation.lng
                     },${
                         ambulanceLocation.lat
-                    },&end=${
+                    }&end=${
                         patientLocation.lng
                     },${
                         patientLocation.lat
@@ -75,7 +97,12 @@ function MapComponent(){
 
                 const data = await response.json();
 
-                const summary = data.features[0].properties.summary
+                if (!data || !data.features || data.features.length === 0) {
+                      console.log("No route found");
+                      return;
+                }
+
+                const summary = data.features[0].properties.summary;
 
                 const distanceKm = (summary.distance / 1000).toFixed(2);
 
@@ -91,14 +118,6 @@ function MapComponent(){
                 }else{
                     setTrafficLevel("High");
                 }
-                
-
-                if (!data.features) {
-                      console.log("No route found");
-                        return;
-                    }
-
-                console.log(data);
 
                 const coordinates = data.features[0].geometry.coordinates.map(
                     (coord) => [
@@ -121,60 +140,102 @@ function MapComponent(){
 
         fetchRoute();
 
-    },[ambulanceLocation]);
+    }, [ambulanceLocation, patientLocation, hasValidAmbulanceCoords, hasValidPatientCoords]);
 
     return ( 
-        <>
-        <h1>Map Working</h1>
+        <div style={{ position: "relative", width: "100%", height: "65vh" }}>
+        
+        {/* Glassmorphic Diagnostics Console */}
         <div
             style = {{
-                padding: "10px",
-                background: "white",
+                padding: "15px",
+                background: "rgba(22, 26, 35, 0.85)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
                 position: "absolute",
                 zIndex: 1000,
-                left: 10,
-                top: 10,
-                borderRadius: "10px",
+                left: 20,
+                top: 20,
+                borderRadius: "20px",
+                color: "#e5e7eb",
+                boxShadow: "0 10px 30px -10px rgba(0, 0, 0, 0.7)",
+                width: "220px",
+                fontFamily: "sans-serif"
             }} >
             
-            <h3>ETA: {eta} mins</h3>
-            <h3>Distance: {distance} km</h3>
-            <h3>Traffic Level: {trafficLevel}</h3>
+            <h3 style={{ margin: "0 0 5px 0", fontSize: "10px", fontWeight: "bold", textTransform: "uppercase", color: "#9ca3af", letterSpacing: "0.08em" }}>Route Diagnostics</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" }}>
+                    <span style={{ color: "#6b7280" }}>ETA:</span>
+                    <span style={{ color: "#f3f4f6", fontWeight: "bold" }}>{eta ? `${eta} mins` : "Calculating..."}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" }}>
+                    <span style={{ color: "#6b7280" }}>Distance:</span>
+                    <span style={{ color: "#f3f4f6", fontWeight: "bold" }}>{distance ? `${distance} km` : "Calculating..."}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" }}>
+                    <span style={{ color: "#6b7280" }}>Traffic Status:</span>
+                    <span style={{
+                        color: trafficLevel === "Low" ? "#10b981" : trafficLevel === "Moderate" ? "#f59e0b" : trafficLevel === "High" ? "#ef4444" : "#f3f4f6",
+                        fontWeight: "bold",
+                        background: trafficLevel === "Low" ? "rgba(16, 185, 129, 0.1)" : trafficLevel === "Moderate" ? "rgba(245, 158, 11, 0.1)" : trafficLevel === "High" ? "rgba(239, 68, 68, 0.1)" : "transparent",
+                        padding: "2px 6px",
+                        borderRadius: "6px"
+                    }}>{trafficLevel || "Analyzing..."}</span>
+                </div>
+            </div>
         </div>
-            <MapContainer
-            center = {ambulanceLocation}
+
+        <MapContainer
+            center = {
+                hasValidAmbulanceCoords 
+                    ? [ambulanceLocation.lat, ambulanceLocation.lng] 
+                    : (hasValidPatientCoords ? [patientLocation.lat, patientLocation.lng] : [25.591, 85.1376])
+            }
             zoom = {13}
             style = {{
-                height: "100vh",
+                height: "100%",
                 width: "100%",
+                filter: "invert(90%) hue-rotate(180deg) brightness(85%) contrast(110%)"
             }} >
 
                 <TileLayer 
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
                 {/* Ambulance marker */}
-                <Marker position={ambulanceLocation}>
-                <Popup>
-                    Ambulance
-                </Popup>
-                </Marker>
+                {hasValidAmbulanceCoords && (
+                    <Marker position={[
+                         ambulanceLocation.lat,
+                         ambulanceLocation.lng
+                      ]}>
+                        <Popup>
+                            Ambulance (Live)
+                        </Popup>
+                    </Marker>
+                )}
 
                 {/* Patient marker */}
-                <Marker position={patientLocation}>
-                    <Popup>
-                        Patient
-                    </Popup>
-                </Marker>
+                {hasValidPatientCoords && (
+                    <Marker
+                        position={[
+                            patientLocation.lat,
+                            patientLocation.lng
+                        ]} >
+                        <Popup>Patient Location</Popup>
+                    </Marker>
+                )}
 
                 {/* Route Line */}
-                <Polyline 
-                positions={routeCoordinates} 
-                />
+                {hasValidAmbulanceCoords && hasValidPatientCoords && routeCoordinates.length > 0 && (
+                    <Polyline 
+                        positions={routeCoordinates} 
+                        pathOptions={{ color: "#ef4444", weight: 5, opacity: 0.8 }}
+                    />
+                )}
 
             </MapContainer>
-            </>
-
+        </div>
     );
 }
 

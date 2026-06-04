@@ -41,6 +41,11 @@ For quick system evaluation, use these pre-configured accounts in the database. 
 ### Backend
 - **Node.js & Express:** Lightweight, scalable server routing and REST API framework.
 - **Mongoose & MongoDB:** Document-oriented database storage with customized `2dsphere` spatial indexing to calculate geolocation coordinates.
+- **Mongoose Database Schemas:** 
+  - **User Schema:** Enforces authenticated credentials, names, and access roles (`admin`, `driver`, `patient`, `hospital`).
+  - **Emergency Request Schema:** Tracks pickup coordinates (`2dsphere` indexed), patient notes, dispatch status transitions, and driver associations.
+  - **Post Schema:** Houses base64 image data, likes arrays, and interactive comments collections for the community feed.
+  - **Hazard Schema:** Documents potholes, water logging, and road closures sorted by upvote telemetry.
 - **Socket.io:** Real-time bi-directional WebSockets ensuring latency-free coordinate broadcasts.
 - **JWT & BcryptJS:** High-security authentication tokens and hashed password encryptions.
 
@@ -158,6 +163,31 @@ We integrated high-tech, live GPS tracking radars directly into the desktop side
   - **Calibrating state:** Displays a glowing "📡 Calibrating GPS..." banner when toggling online while geolocation permissions or signals are resolving.
   - **Online live radar:** Once active, displays a high-contrast dark military-radar centered on their live coordinates.
 - **Premium Dark Cybernetic Tile Styling:** Applied custom CSS matrix shifts (`filter: invert(90%) hue-rotate(180deg)...`) to convert standard map canvases into a gorgeous glowing dark-theme tactical display.
+
+### 3. Hospital Dashboard (Triage Radar & Trauma Capacity Ledger)
+An all-in-one clinic console designed for hospital personnel and emergency ward directors:
+- **Live Incoming Triage Radar:** Continuously updates a dashboard registry displaying incoming ambulance units, patient names, en-route status, trauma priority tags (e.g., Cardiac Alert, Trauma Accident, Pregnancy Case), and triage notes.
+- **Trauma Capacity Settings:** Synchronizes active capacity ledgers (ICU Bed availability, Operating Theaters preparedness, active Surgical specialist teams, and the primary emergency ward hotline) with instant `localStorage` saving and live transmission support.
+- **Automated Routing Alignment:** The synchronized triage data automatically routes to dispatch units on the road, enabling crew drivers to make informed routing decisions in transit.
+- **Role-based Security:** Restricts access to authenticated hospital accounts with interactive sidebar switching between the community hub, radar, and settings consoles.
+
+### 4. Patient Dashboard (Medical Profile Ledger & Live Coordinates Radar)
+A high-tech patient dispatch terminal prioritizing automated emergency workflows and clinical data integrity:
+- **Personal Emergency Record Ledger:** A clinical metadata interface where patients manage blood groups, insurance policies, drug allergies, pre-existing conditions, and emergency SOS contacts. Vitals are automatically package-bundled and routed directly to claiming ambulance rigs and trauma wards upon booking trigger.
+- **Live Coordinates Radar Tab:** Continuous real-time location telemetry with coordinates (latitude, longitude) and signal accuracy (± meters) tracked via `navigator.geolocation.watchPosition`.
+- **Cybernetic Map Tiles:** Standard Leaflet maps are transformed into a tactical military style with dynamic centration and coordinate markers.
+- **Unified Navigation Console:** Seamless sidebar tabs allowing patients to easily jump from the active dispatch map, community hub, profile editor, and live radar coordinates display.
+
+### 5. Admin Dashboard (System-Wide Dispatch Audit & Incident Maps)
+A central command hub console for real-time fleet overview and auditing:
+- **Metrics Overview Grid:** Displays high-fidelity tally boxes containing total emergencies logged, pending claims, active rescues, and completed trips.
+- **Real-Time Incident Map Radar:** Dynamically plots active pickups and en route transit markers with clickable popup description bubbles.
+- **Filter & Audit Log Table:** Allows admin operators to filter the entire database of rescue requests by their lifecycle state (`all`, `pending`, `accepted`, `on_the_way`, `arrived`, `completed`, `cancelled`) with instant tabular view updates.
+
+### 6. Production Deployment & SPA Rewrite Routing
+Fully containerized routing parameters designed for high-availability cloud host providers:
+- **Single-Page Application (SPA) Vercel Config:** Supply a customized `vercel.json` rewrite file to proxy index redirects (`/(.*) -> /index.html`). This completely eliminates blank screens and 404 navigation errors on user console page reloads.
+- **Dynamic CORS & API Endpoint Swapping:** Refactored server configuration files to map production Render URLs (`https://smartambulancetrackingsystem.onrender.com`) dynamically using environment variables (`import.meta.env.VITE_API_URL`) while retaining seamless local offline fallbacks.
 
 ---
 

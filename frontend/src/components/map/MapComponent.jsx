@@ -7,12 +7,39 @@ import {
 } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
-
+import L from "leaflet";
 import { useEffect, useState } from 'react';
 import socket from '../../socket/socket';
+import api from "../../services/api.js";
 
+// Custom premium marker icons using divIcons
+const patientIcon = L.divIcon({
+  html: `<div style="font-size: 26px; filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.9)); display: flex; align-items: center; justify-content: center;">🚨</div>`,
+  className: 'custom-patient-marker',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15]
+});
 
-function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
+const ambulanceIcon = L.divIcon({
+  html: `<div style="font-size: 26px; filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.9)); display: flex; align-items: center; justify-content: center;">🚑</div>`,
+  className: 'custom-ambulance-marker',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15]
+});
+
+const hospitalIcon = L.divIcon({
+  html: `<div style="font-size: 24px; filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.8)); display: flex; align-items: center; justify-content: center;">🏥</div>`,
+  className: 'custom-hospital-marker',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+  popupAnchor: [0, -15]
+});
+
+function MapComponent({pickupLocation, driverLocation, dropoffLocation, status}){
+
+    const [hospitals, setHospitals] = useState([]);
 
     const patientLocation = (pickupLocation && Array.isArray(pickupLocation.coordinates) && pickupLocation.coordinates.length >= 2) ? {
         lat: Number(pickupLocation.coordinates[1]),
@@ -42,6 +69,40 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
     const [trafficLevel, setTrafficLevel] = useState("");
 
     const [routeCoordinates, setRouteCoordinates] = useState([]);
+
+    // Haversine distance calculator
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+        if (!lat1 || !lon1 || !lat2 || !lon2 || isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) return null;
+        const R = 6371; // km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return (R * c).toFixed(1);
+    };
+
+    // Query active nearby trauma centers
+    useEffect(() => {
+        const fetchHospitals = async () => {
+            const activeStatuses = ["accepted", "on_the_way", "arrived"];
+            const isTripActive = (status && activeStatuses.includes(status)) || driverLocation;
+            if (!isTripActive) {
+                setHospitals([]);
+                return;
+            }
+            try {
+                const response = await api.get("/user/hospitals");
+                setHospitals(response.data.hospitals || []);
+            } catch (err) {
+                console.error("Failed to fetch nearby hospitals:", err);
+            }
+        };
+
+        fetchHospitals();
+    }, [status, driverLocation]);
 
     // Socket Listener
     useEffect(() => {
@@ -197,7 +258,14 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
 
         fetchRoute();
 
-    }, [ambulanceLocation, patientLocation, hasValidAmbulanceCoords, hasValidPatientCoords]);
+    }, [
+        ambulanceLocation?.lat,
+        ambulanceLocation?.lng,
+        patientLocation?.lat,
+        patientLocation?.lng,
+        hasValidAmbulanceCoords,
+        hasValidPatientCoords
+    ]);
 
     return ( 
         <div className="space-y-4 w-full">
@@ -259,12 +327,20 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
         
                     {/* Ambulance marker */}
                     {hasValidAmbulanceCoords && (
-                        <Marker position={[
-                             ambulanceLocation.lat,
-                             ambulanceLocation.lng
-                          ]}>
+                        <Marker 
+                            position={[
+                                ambulanceLocation.lat,
+                                ambulanceLocation.lng
+                            ]}
+                            icon={ambulanceIcon}
+                        >
                             <Popup>
-                                Ambulance (Live)
+                                <div className="p-2 font-sans text-xs bg-[#161a23] text-white rounded-lg border border-gray-800">
+                                    <h4 className="font-bold text-blue-400">Ambulance (Live)</h4>
+                                    <p className="text-gray-500 text-[10px] mt-1 font-mono">
+                                        Lat: {ambulanceLocation.lat.toFixed(4)}, Lng: {ambulanceLocation.lng.toFixed(4)}
+                                    </p>
+                                </div>
                             </Popup>
                         </Marker>
                     )}
@@ -275,10 +351,58 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation}){
                             position={[
                                 patientLocation.lat,
                                 patientLocation.lng
-                            ]} >
-                            <Popup>Patient Location</Popup>
+                            ]}
+                            icon={patientIcon}
+                        >
+                            <Popup>
+                                <div className="p-2 font-sans text-xs bg-[#161a23] text-white rounded-lg border border-gray-800">
+                                    <h4 className="font-bold text-red-400">Patient Emergency</h4>
+                                    <p className="text-gray-500 text-[10px] mt-1 font-mono">
+                                        Lat: {patientLocation.lat.toFixed(4)}, Lng: {patientLocation.lng.toFixed(4)}
+                                    </p>
+                                </div>
+                            </Popup>
                         </Marker>
                     )}
+
+                    {/* Hospital markers */}
+                    {hospitals.map((hospital) => {
+                        const hasCoords = hospital.currentLocation && 
+                            Array.isArray(hospital.currentLocation.coordinates) && 
+                            hospital.currentLocation.coordinates.length >= 2;
+                        if (!hasCoords) return null;
+                        
+                        const hLat = Number(hospital.currentLocation.coordinates[1]);
+                        const hLng = Number(hospital.currentLocation.coordinates[0]);
+                        if (isNaN(hLat) || isNaN(hLng)) return null;
+
+                        const distToPatient = hasValidPatientCoords 
+                            ? calculateDistance(hLat, hLng, patientLocation.lat, patientLocation.lng)
+                            : null;
+
+                        return (
+                            <Marker
+                                key={hospital._id || hospital.id}
+                                position={[hLat, hLng]}
+                                icon={hospitalIcon}
+                            >
+                                <Popup>
+                                    <div className="p-2.5 font-sans text-xs bg-[#161a23] text-white rounded-xl border border-gray-800 shadow-xl min-w-[180px]">
+                                        <div className="flex items-center gap-1.5 border-b border-gray-800 pb-1.5 mb-1.5">
+                                            <span className="text-md">🏥</span>
+                                            <h4 className="font-bold text-green-400 leading-tight">{hospital.name}</h4>
+                                        </div>
+                                        <p className="text-gray-400 text-[10px]">Contact: {hospital.email}</p>
+                                        {distToPatient && (
+                                            <p className="text-[10px] text-gray-500 mt-1">
+                                                Distance to Patient: <span className="text-white font-bold font-mono">{distToPatient} km</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                </Popup>
+                            </Marker>
+                        );
+                    })}
         
                     {/* Route Line */}
                     {hasValidAmbulanceCoords && hasValidPatientCoords && routeCoordinates.length > 0 && (

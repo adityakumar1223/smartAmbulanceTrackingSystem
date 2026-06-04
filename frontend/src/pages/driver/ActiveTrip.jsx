@@ -130,6 +130,7 @@ const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation, patientLive
             }
             driverLocation={driverLocation}
             dropoffLocation={trip.dropoffLocation}
+            status={trip.status}
           />
         </div>
       </div>

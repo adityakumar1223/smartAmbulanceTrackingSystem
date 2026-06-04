@@ -143,6 +143,7 @@ const ActiveTripCard = () => {
             pickupLocation={activeEmergency.pickupLocation}
             driverLocation={driverLocation}
             dropoffLocation={activeEmergency.dropoffLocation}
+            status={activeEmergency.status}
           />
         </div>
       </div>

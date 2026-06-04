@@ -23,6 +23,7 @@ const authRoutes = require("./routes/authRoutes.js");
 const userRoutes = require("./routes/userRoutes.js");
 const adminRoutes = require("./routes/adminRoutes.js");
 const emergencyRoutes = require("./routes/emergencyRoutes.js");
+const communityRoutes = require("./routes/communityRoutes.js");
 
 
 //Middleware
@@ -34,6 +35,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/emergency", emergencyRoutes);
+app.use("/api/community", communityRoutes);
 
 
 
@@ -49,6 +51,8 @@ const io = new Server(server, {
         origin: "*",
     },
 });
+
+app.set("io", io);
 
 initializeSocket(io);
 

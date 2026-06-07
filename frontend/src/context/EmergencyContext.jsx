@@ -27,8 +27,8 @@ export const EmergencyProvider = ({children}) => {
                 emergencyData
             );
 
-            setActiveEmergency(response.data);
-            return response.data;
+            setActiveEmergency(response.data.request || response.data);
+            return response.data.request || response.data;
 
         } catch (error) {
             console.log(
@@ -56,8 +56,8 @@ export const EmergencyProvider = ({children}) => {
                 `/emergency/accept/${emergencyId}`
             );
 
-            setActiveEmergency(response.data);
-            return response.data;
+            setActiveEmergency(response.data.request || response.data);
+            return response.data.request || response.data;
             
         } catch (error) {
 
@@ -87,8 +87,8 @@ export const EmergencyProvider = ({children}) => {
                     {status}
                 );
 
-                setActiveEmergency(response.data);
-                return response.data;
+                setActiveEmergency(response.data.request || response.data);
+                return response.data.request || response.data;
                 
             } catch (error) {
 

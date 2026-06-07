@@ -188,6 +188,16 @@ function Login() {
               <p className="text-xs text-gray-500 mt-1 font-mono">SOS Request ID: {activeSOS._id.substring(activeSOS._id.length - 8).toUpperCase()}</p>
             </div>
 
+            {/* Waiting Status Alert Banner */}
+            {activeSOS.status === "pending" && (
+              <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 rounded-2xl flex items-center justify-center gap-3 text-xs animate-pulse">
+                <FiLoader className="w-4.5 h-4.5 animate-spin flex-shrink-0" />
+                <div className="font-semibold uppercase tracking-wider">
+                  Waiting for request to get accepted.
+                </div>
+              </div>
+            )}
+
             {/* Stepper Timeline */}
             <div className="grid grid-cols-5 gap-1 relative text-center">
               <div className="absolute top-3.5 left-0 right-0 h-0.5 bg-gray-800 -z-10" />

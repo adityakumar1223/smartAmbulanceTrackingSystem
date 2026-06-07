@@ -47,9 +47,19 @@ const ActiveTripCard = () => {
         </div>
         <span className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/30 rounded-full text-xs font-bold uppercase tracking-wider text-red-400">
           <FiTruck className="animate-bounce" />
-          {activeEmergency.status.replace("_", " ")}
+          {activeEmergency.status === "pending" ? "Waiting for Acceptance" : activeEmergency.status.replace("_", " ")}
         </span>
       </div>
+
+      {/* Waiting Status Alert Banner */}
+      {activeEmergency.status === "pending" && (
+        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 rounded-2xl flex items-center gap-3 text-xs animate-pulse">
+          <FiLoader className="w-4.5 h-4.5 animate-spin flex-shrink-0" />
+          <div className="font-semibold uppercase tracking-wider">
+            Waiting for request to get accepted.
+          </div>
+        </div>
+      )}
 
       {/* Stepper Timeline */}
       <div className="hidden md:grid grid-cols-5 gap-2 relative">

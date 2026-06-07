@@ -5,6 +5,7 @@ import { FiMail, FiLock, FiActivity, FiXCircle, FiLoader, FiMapPin, FiTruck } fr
 import socket from "../socket/socket.js";
 import api from "../services/api.js";
 import MapComponent from "../components/map/MapComponent.jsx";
+import Radar from "radar-sdk-js";
 
 function Login() {
   const { login } = useAuth();
@@ -99,40 +100,70 @@ function Login() {
   };
 
   const handleSOSClick = async () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
-
     setSosLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const pickupLocation = {
-            type: "Point",
-            coordinates: [position.coords.longitude, position.coords.latitude]
-          };
 
-          const response = await api.post("/emergency/sos", { pickupLocation });
-          const request = response.data.request;
-          
-          setActiveSOS(request);
-          localStorage.setItem("anonymous_sos_request", JSON.stringify(request));
-          alert("SOS Dispatch Triggered! Nearby ambulances are being notified.");
-        } catch (error) {
-          console.error("Failed to trigger SOS:", error);
-          alert(error.response?.data?.message || "Failed to trigger SOS. Please try again or call emergency services.");
-        } finally {
-          setSosLoading(false);
-        }
-      },
-      (error) => {
-        console.error("Geolocation error:", error);
-        alert("Please enable location permissions to dispatch an ambulance to your location.");
+    const handleSuccess = async (lat, lng) => {
+      try {
+        const pickupLocation = {
+          type: "Point",
+          coordinates: [lng, lat]
+        };
+
+        const response = await api.post("/emergency/sos", { pickupLocation });
+        const request = response.data.request;
+        
+        setActiveSOS(request);
+        localStorage.setItem("anonymous_sos_request", JSON.stringify(request));
+        alert("SOS Dispatch Triggered! Nearby ambulances are being notified.");
+      } catch (error) {
+        console.error("Failed to trigger SOS:", error);
+        alert(error.response?.data?.message || "Failed to trigger SOS. Please try again or call emergency services.");
+      } finally {
         setSosLoading(false);
-      },
-      { enableHighAccuracy: true }
-    );
+      }
+    };
+
+    const handleFallback = () => {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        setSosLoading(false);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          handleSuccess(position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          alert("Please enable location permissions to dispatch an ambulance to your location.");
+          setSosLoading(false);
+        },
+        { enableHighAccuracy: true }
+      );
+    };
+
+    try {
+      // Configure Anonymous SOS user metadata in Radar
+      Radar.setUserId("anonymous_sos_" + Date.now());
+      Radar.setMetadata({ role: "patient", type: "anonymous_sos" });
+
+      Radar.trackOnce()
+        .then((result) => {
+          if (result && result.location) {
+            handleSuccess(result.location.latitude, result.location.longitude);
+          } else {
+            handleFallback();
+          }
+        })
+        .catch((err) => {
+          console.warn("Radar SOS tracking failed, falling back to native Geolocation:", err);
+          handleFallback();
+        });
+    } catch (err) {
+      console.error("SOS tracking error:", err);
+      handleFallback();
+    }
   };
 
   const handleCancelSOS = async () => {

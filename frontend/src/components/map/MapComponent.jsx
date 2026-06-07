@@ -11,6 +11,7 @@ import L from "leaflet";
 import { useEffect, useState } from 'react';
 import socket from '../../socket/socket';
 import api from "../../services/api.js";
+import Radar from "radar-sdk-js";
 
 // Custom premium marker icons using divIcons
 const patientIcon = L.divIcon({
@@ -95,14 +96,66 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
             }
             try {
                 const response = await api.get("/user/hospitals");
-                setHospitals(response.data.hospitals || []);
+                const dbHospitals = response.data.hospitals || [];
+                
+                if (dbHospitals.length > 0) {
+                    setHospitals(dbHospitals);
+                } else if (hasValidPatientCoords) {
+                    // Fallback to Radar place search if no database hospitals found
+                    Radar.searchPlaces({
+                        near: {
+                            latitude: patientLocation.lat,
+                            longitude: patientLocation.lng
+                        },
+                        radius: 5000,
+                        categories: ['medical-health'],
+                        limit: 10
+                    }).then((result) => {
+                        if (result && result.places) {
+                            const radarHospitals = result.places.map(p => ({
+                                _id: p._id,
+                                name: p.name,
+                                email: p.chain?.name || 'radar-medical@facility.local',
+                                currentLocation: {
+                                    type: "Point",
+                                    coordinates: [p.location.coordinates[0], p.location.coordinates[1]]
+                                }
+                            }));
+                            setHospitals(radarHospitals);
+                        }
+                    }).catch(err => console.warn("Radar places search failed:", err));
+                }
             } catch (err) {
-                console.error("Failed to fetch nearby hospitals:", err);
+                console.error("Failed to fetch database hospitals, trying Radar place search...", err);
+                if (hasValidPatientCoords) {
+                    Radar.searchPlaces({
+                        near: {
+                            latitude: patientLocation.lat,
+                            longitude: patientLocation.lng
+                        },
+                        radius: 5000,
+                        categories: ['medical-health'],
+                        limit: 10
+                    }).then((result) => {
+                        if (result && result.places) {
+                            const radarHospitals = result.places.map(p => ({
+                                _id: p._id,
+                                name: p.name,
+                                email: p.chain?.name || 'radar-medical@facility.local',
+                                currentLocation: {
+                                    type: "Point",
+                                    coordinates: [p.location.coordinates[0], p.location.coordinates[1]]
+                                }
+                            }));
+                            setHospitals(radarHospitals);
+                        }
+                    }).catch(rErr => console.error("Radar fallback places search failed:", rErr));
+                }
             }
         };
 
         fetchHospitals();
-    }, [status, driverLocation]);
+    }, [status, driverLocation, hasValidPatientCoords, patientLocation?.lat, patientLocation?.lng]);
 
     // Socket Listener
     useEffect(() => {

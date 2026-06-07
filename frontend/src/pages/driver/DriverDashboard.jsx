@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import socket from "../../socket/socket.js";
+import Radar from "radar-sdk-js";
 import { useAuth } from "../../context/AuthContext";
 import { useEmergency } from "../../context/EmergencyContext";
 import api from "../../services/api.js";
@@ -327,9 +328,36 @@ function DriverDashboard() {
     initDashboard();
   }, []);
 
+  // Set identity when user changes
+  useEffect(() => {
+    if (user) {
+      Radar.setUserId(user.id || user._id);
+      Radar.setMetadata({
+        name: user.name,
+        email: user.email,
+        role: user.role
+      });
+    }
+  }, [user]);
+
   // Sync online GPS tracking and Socket emissions
   useEffect(() => {
     if (isOnline) {
+      // Initial trackOnce
+      Radar.trackOnce()
+        .then((result) => {
+          if (result && result.location) {
+            const locData = {
+              lat: result.location.latitude,
+              lng: result.location.longitude,
+              driverId: user?.id
+            };
+            setDriverLocation({ lat: locData.lat, lng: locData.lng });
+            socket.emit("driverLocationUpdate", locData);
+          }
+        })
+        .catch((err) => console.warn("Initial Driver Radar track failed:", err));
+
       if (navigator.geolocation) {
         watchIdRef.current = navigator.geolocation.watchPosition(
           (position) => {
@@ -343,6 +371,15 @@ function DriverDashboard() {
             // Emit to backend socket using corrected event name
             socket.emit("driverLocationUpdate", locData);
             console.log("GPS Location Emitted via WebSockets:", locData);
+
+            // Sync with Radar in the background
+            Radar.trackOnce()
+              .then((result) => {
+                if (result && result.location) {
+                  console.log("Driver Radar position synced:", result.location);
+                }
+              })
+              .catch((err) => console.warn("Driver Radar sync failed:", err));
           },
           (err) => console.error("GPS Watch error:", err),
           { enableHighAccuracy: true, maximumAge: 0 }

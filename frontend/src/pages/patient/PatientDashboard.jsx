@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from 'react-router-dom';
 import LogoutButton from '../../components/LogoutButton.jsx';
+import Radar from "radar-sdk-js";
 import EmergencyForm from "./EmergencyForm.jsx";
 import ActiveTripCard from "./ActiveTripCard.jsx";
 import { useEmergency } from "../../context/EmergencyContext";
@@ -104,6 +105,28 @@ function PatientDashboard() {
   const [isGpsActive, setIsGpsActive] = useState(false);
 
   useEffect(() => {
+    if (user) {
+      Radar.setUserId(user.id || user._id);
+      Radar.setMetadata({
+        name: user.name,
+        email: user.email,
+        role: user.role
+      });
+    }
+
+    // Initial check-in location via Radar
+    Radar.trackOnce()
+      .then((result) => {
+        if (result && result.location) {
+          setUserLocation({
+            lat: result.location.latitude,
+            lng: result.location.longitude
+          });
+          setIsGpsActive(true);
+        }
+      })
+      .catch((err) => console.warn("Initial Radar tracking failed:", err));
+
     if (!navigator.geolocation) {
       setGpsError("Geolocation is not supported by your browser");
       return;
@@ -117,6 +140,15 @@ function PatientDashboard() {
       setGpsAccuracy(position.coords.accuracy);
       setIsGpsActive(true);
       setGpsError(null);
+
+      // Sync position to Radar Platform in background
+      Radar.trackOnce()
+        .then((result) => {
+          if (result && result.location) {
+            console.log("Radar patient location synced:", result.location);
+          }
+        })
+        .catch((err) => console.warn("Background Radar sync failed:", err));
     };
 
     const handleError = (error) => {
@@ -132,7 +164,7 @@ function PatientDashboard() {
     });
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [user]);
 
   // Broadcast patient live location to assigned driver
   useEffect(() => {

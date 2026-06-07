@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useEmergency } from "../../context/EmergencyContext";
 import { FiAlertCircle, FiChevronRight, FiMapPin } from "react-icons/fi";
+import Radar from "radar-sdk-js";
 
 const EmergencyForm = () => {
   const { createEmergency, loading } = useEmergency();
@@ -21,36 +22,57 @@ const EmergencyForm = () => {
     e.preventDefault();
     setLocationStatus("locating");
 
-    try {
+    const handleSuccess = async (lat, lng) => {
+      setLocationStatus("success");
+      const emergencyPayload = {
+        emergencyType: formData.emergencyType,
+        patientNotes: formData.patientNotes,
+        pickupLocation: {
+          type: "Point",
+          coordinates: [lng, lat],
+        },
+      };
+
+      await createEmergency(emergencyPayload);
+      alert("Emergency Request successfully dispatched!");
+    };
+
+    const handleFallback = () => {
+      if (!navigator.geolocation) {
+        setLocationStatus("error");
+        alert("Geolocation is not supported by your browser");
+        return;
+      }
+
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
-          setLocationStatus("success");
-
-          const emergencyPayload = {
-            emergencyType: formData.emergencyType,
-            patientNotes: formData.patientNotes,
-            pickupLocation: {
-              type: "Point",
-              coordinates: [longitude, latitude],
-            },
-          };
-
-          await createEmergency(emergencyPayload);
-          alert("Emergency Request successfully dispatched!");
+        (position) => {
+          handleSuccess(position.coords.latitude, position.coords.longitude);
         },
         (error) => {
-          console.error(error);
+          console.error("Native Geolocation Error:", error);
           setLocationStatus("error");
           alert("Unable to fetch exact GPS location. Please check browser permissions.");
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
+    };
+
+    try {
+      Radar.trackOnce()
+        .then((result) => {
+          if (result && result.location) {
+            handleSuccess(result.location.latitude, result.location.longitude);
+          } else {
+            handleFallback();
+          }
+        })
+        .catch((error) => {
+          console.warn("Radar trackOnce error, falling back to Geolocation:", error);
+          handleFallback();
+        });
     } catch (error) {
       console.error("Emergency Form Error:", error);
-      setLocationStatus("error");
-      alert("Failed to submit request. Please try again.");
+      handleFallback();
     }
   };
 

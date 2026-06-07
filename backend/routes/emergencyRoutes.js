@@ -9,12 +9,16 @@ const {
     acceptEmergencyRequest, 
     getAllPendingRequest, 
     updateEmergencyStatus,
-    getDriverRequest
+    getDriverRequest,
+    createAnonymousSOSEmergency,
+    cancelAnonymousSOSEmergency
                             } = require("../controllers/emergencyController.js");
 
 //patient creates request
 
 router.post("/request", protect, authorizeRoles("patient"), createEmergencyRequest);
+router.post("/sos", createAnonymousSOSEmergency);
+router.put("/sos/cancel/:id", cancelAnonymousSOSEmergency);
 
 //hospital and admin can get all the emergency requests
 

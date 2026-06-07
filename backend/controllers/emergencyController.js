@@ -1,4 +1,5 @@
 const emergencyRequest = require("../models/emergencyRequest.js");
+const User = require("../models/user.js");
 const { getIo } = require('../sockets/socket.js');
 
 const createEmergencyRequest = async (req, res) => {
@@ -179,11 +180,94 @@ const getDriverRequest = async (req, res) => {
     }
 };
 
+const createAnonymousSOSEmergency = async (req, res) => {
+    try {
+        const { pickupLocation } = req.body;
+
+        if (!pickupLocation || !pickupLocation.coordinates || pickupLocation.coordinates.length < 2) {
+            return res.status(400).json({
+                message: "Valid pickup coordinates are required for SOS dispatch."
+            });
+        }
+
+        // Check if the system-wide Anonymous SOS user exists
+        let anonymousUser = await User.findOne({ email: "sos@system.local" });
+        if (!anonymousUser) {
+            // Create a system-wide SOS placeholder user to satisfy schema references
+            anonymousUser = await User.create({
+                name: "Anonymous SOS Caller",
+                email: "sos@system.local",
+                username: "anonymous_sos",
+                password: "system_generated_sos_password_123",
+                role: "patient"
+            });
+        }
+
+        const request = await emergencyRequest.create({
+            patientId: anonymousUser._id,
+            emergencyType: "Severe_Bleeding", // Default critical type
+            pickupLocation,
+            patientNotes: "EMERGENCY SOS: Triggered anonymously from login screen."
+        });
+
+        const populatedRequest = await emergencyRequest.findById(request._id)
+            .populate("patientId", "name email role");
+
+        const io = getIo();
+        io.emit("emergencyRequest", populatedRequest);
+
+        res.status(201).json({
+            message: "SOS Emergency dispatch created successfully",
+            request: populatedRequest,
+        });
+
+    } catch (error) {
+        console.error("SOS Emergency request error:", error);
+        res.status(500).json({
+            message: error.message,
+        });
+    }
+};
+
+const cancelAnonymousSOSEmergency = async (req, res) => {
+    try {
+        const requestId = req.params.id;
+        const request = await emergencyRequest.findById(requestId);
+
+        if (!request) {
+            return res.status(404).json({
+                message: "Emergency request not found"
+            });
+        }
+
+        request.status = "cancelled";
+        await request.save();
+
+        const populatedRequest = await emergencyRequest.findById(request._id)
+            .populate("patientId", "name email role")
+            .populate("driverId", "name email");
+
+        const io = getIo();
+        io.emit("emergencyStatusUpdated", populatedRequest);
+
+        res.status(200).json({
+            message: "SOS Emergency cancelled successfully",
+            request: populatedRequest
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: error.message
+        });
+    }
+};
+
 module.exports = {
     createEmergencyRequest, 
     getAllEmergencyRequest, 
     acceptEmergencyRequest, 
     getAllPendingRequest, 
     updateEmergencyStatus,
-    getDriverRequest
+    getDriverRequest,
+    createAnonymousSOSEmergency,
+    cancelAnonymousSOSEmergency
 };

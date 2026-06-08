@@ -14,6 +14,7 @@ For quick system evaluation, use these pre-configured accounts in the database. 
 | **Paramedic Crew (Driver)** | `driver@gmail.com` | `driver1223` | `password123` | `driver` | GPS transmitter controls & incident claim console |
 | **Patient Account A** | `aditya@gmail.com` | `whoadii` | `password123` | `patient` | Emergency dispatch & stepper tracking map |
 | **Patient Account B** | `aryan@gmail.com` | `aryakumar1223` | `password123` | `patient` | Emergency dispatch & stepper tracking map |
+| **Trauma Center (Hospital)** | `pmch@hospital.com` | `patnamedicalcollegehospitalpmch` | `password123` | `hospital` | Live triage dashboard & capacity ledgers |
 
 ---
 
@@ -142,6 +143,23 @@ Here is a summary of crucial bugs fixed and structural refactorings made to brin
 10. **Production API & WebSocket Dynamic Routing Integration:**
     - *Issue:* The API connection base URL (`api.js`) and the Socket.io client connection endpoint (`socket.js`) were hardcoded to `"http://localhost:5000"`. This made production deployments (e.g., deploying the backend to Render at `https://smartambulancetrackingsystem.onrender.com`) fail to establish a connection without manually rewriting system code files.
     - *Fix:* Refactored both configurations to dynamically load `import.meta.env.VITE_API_URL` as the primary connection address with a stable fallback to localhost for seamless offline local development.
+11. **JWT Expiry & State Synchronization Improvements:**
+    - **Axios 401 Interceptor:** Added a request/response Axios interceptor in [api.js](file:///d:/internship/collegeInternship/smartAmbulanceTrackingSystem/frontend/src/services/api.js) to automatically trigger user logout and session cleanup if any backend API query returns an HTTP `401 Unauthorized` response (e.g., when the 7-day token expires).
+    - **ProtectedRoute State Sync:** Corrected `ProtectedRoute` to listen directly to React AuthContext instead of raw, stale `localStorage` keys, ensuring routes reactively lock down instantly upon logout.
+    - **LogoutButton Desync Fix:** Programmed `LogoutButton` to call the `logout()` method in `AuthContext` to clear memory states and broadcast session closure, stopping ghost sessions.
+12. **WebSockets Integrity & Performance Tweaks:**
+    - **Clean Socket Unbinding:** Fixed a typo in `EmergencyContext.jsx` where socket cleanup called `.off("emergencyStatusUpdate")` instead of `"emergencyStatusUpdated"`, leaving loose handlers.
+    - **Duplicate Listener Cleanup:** Removed double `"driverLocationUpdated"` listener bindings from `MapComponent` and centralized coordinates updates in `EmergencyContext` to prevent state drift and dual firing.
+    - **Static Map Keys:** Replaced dynamic coordinate key props on Leaflet maps with static keys to prevent heavy Leaflet container re-mounting on every GPS telemetry tick.
+13. **Backend Database Refactoring:**
+    - **Sparse Username Index:** Configured `sparse: true` on the Mongoose unique `username` index inside the User schema. This permits multiple guest/patient accounts registered with null usernames to co-exist without triggering MongoDB duplicate index errors.
+    - **Efficient Seeding Lifecycle:** Relocated the initial community database seed validation script from the routing handler path to a single-run trigger on Express server startup.
+14. **Dashboard Community API Synchronization:**
+    - Replaced all local-storage mock updates inside the Patient and Driver dashboard community widgets with real backend API routes (`/api/community/posts`, `/api/community/hazards`), allowing posts, comment threads, upvotes, and images to sync across all connected clients in real-time.
+15. **ReferenceError Blank Page & State Recovery:**
+    - Fixed a page-mount crash on the Hospital Dashboard caused by referencing `FiAlertTriangle` which was used but never imported in the script.
+    - Fixed a secondary `ReferenceError: totalIncoming is not defined` crash by restoring the `totalIncoming` variable definition, which is referenced by the sidebar navigation button badge.
+    - Wrapped the Hospital Dashboard in a React `ErrorBoundary` wrapper to catch and show readable debug diagnostics on-screen rather than presenting a blank screen, and added safe fallback mappings across all listing items.
 
 ---
 
@@ -164,9 +182,11 @@ We integrated high-tech, live GPS tracking radars directly into the desktop side
   - **Online live radar:** Once active, displays a high-contrast dark military-radar centered on their live coordinates.
 - **Premium Dark Cybernetic Tile Styling:** Applied custom CSS matrix shifts (`filter: invert(90%) hue-rotate(180deg)...`) to convert standard map canvases into a gorgeous glowing dark-theme tactical display.
 
-### 3. Hospital Dashboard (Triage Radar & Trauma Capacity Ledger)
+### 3. Hospital Dashboard (Triage Radar, Active Onboard Patients Monitor & Trauma Capacity Ledger)
 An all-in-one clinic console designed for hospital personnel and emergency ward directors:
 - **Live Incoming Triage Radar:** Continuously updates a dashboard registry displaying incoming ambulance units, patient names, en-route status, trauma priority tags (e.g., Cardiac Alert, Trauma Accident, Pregnancy Case), and triage notes.
+- **Active Onboard Patients Monitor:** A dedicated dashboard monitor panel capturing ambulance units with stabilized patients onboard in transit (status `arrived`).
+- **Interactive Live Route Tracking Modal:** Integrated Leaflet routing maps within a modal drawer, letting coordinators track en-route ambulances with path polyline overlays, live distance calculations, and telemetry synchronization indicators.
 - **Trauma Capacity Settings:** Synchronizes active capacity ledgers (ICU Bed availability, Operating Theaters preparedness, active Surgical specialist teams, and the primary emergency ward hotline) with instant `localStorage` saving and live transmission support.
 - **Automated Routing Alignment:** The synchronized triage data automatically routes to dispatch units on the road, enabling crew drivers to make informed routing decisions in transit.
 - **Role-based Security:** Restricts access to authenticated hospital accounts with interactive sidebar switching between the community hub, radar, and settings consoles.
@@ -223,6 +243,11 @@ To verify the real-time ambulance tracking system and see the dynamic, glassmorp
 5. On the **Driver dashboard**, click the **Start Transit** button. This shifts the tracking status to `on_the_way` and begins broadcasting the driver's real-time movement.
 6. As the driver's location shifts, the OpenRouteService API dynamically recalculates route polylines and updates the approaching ETA in real-time on both screens.
 7. Click **Crew Arrived** when the driver reaches the patient's site, updating the status to `arrived`.
+   - **Hospital Dashboard Verification:** In a third browser tab, log in as the Trauma Center:
+     - Email: `pmch@hospital.com`
+     - Password: `password123`
+     You will see this active emergency instantly move from the "Ambulances En Route" panel to the **"Ambulances with Patients Onboard"** grid.
+   - **Live Map Route Tracking:** Click the **"Track Live Route"** button on the patient onboard card. This opens an interactive Leaflet tracking modal plotting the ambulance's location marker and route path in real-time, matching the driver's GPS coordinates.
 8. Finally, click **Complete Mission** when the patient is transported and secured. The trip is closed, resetting both dashboards to idle, and generating a permanent audit log!
 
 ### Phase 4: Command Center & Trauma Boards Auditing

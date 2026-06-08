@@ -93,7 +93,7 @@ function DriverDashboard() {
   const { acceptEmergency, updateEmergencyStatus } = useEmergency();
 
   // NAVIGATION TABS
-  const [activeTab, setActiveTab] = useState("community"); // "community", "cockpit", "stats"
+  const [activeTab, setActiveTab] = useState("cockpit"); // "community", "cockpit", "stats"
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // DRIVER STATUS & TRIP STATE
@@ -108,34 +108,29 @@ function DriverDashboard() {
   const watchIdRef = useRef(null);
 
   // ----------------------------------------------------
-  // TABS STATE: EMBEDDED COMMUNITY (Syncs with standalone page)
+  // TABS STATE: EMBEDDED COMMUNITY (BUG-05: Now synced with backend API)
   // ----------------------------------------------------
   const [communityTab, setCommunityTab] = useState("feed"); // "feed" or "hazards"
-  const [posts, setPosts] = useState(() => {
-    const saved = localStorage.getItem("com_posts");
-    return saved ? JSON.parse(saved) : INITIAL_POSTS;
-  });
-  const [hazards, setHazards] = useState(() => {
-    const saved = localStorage.getItem("com_hazards");
-    return saved ? JSON.parse(saved) : INITIAL_HAZARDS;
-  });
-  const [connections, setConnections] = useState(() => {
-    const saved = localStorage.getItem("com_connections");
-    return saved ? JSON.parse(saved) : INITIAL_CONNECTIONS;
-  });
+  const [posts, setPosts] = useState([]);
+  const [hazards, setHazards] = useState([]);
+  const [connections, setConnections] = useState(INITIAL_CONNECTIONS);
 
-  // Persist community changes to sync with main community page
+  // Fetch community data from backend API on mount (BUG-05)
   useEffect(() => {
-    localStorage.setItem("com_posts", JSON.stringify(posts));
-  }, [posts]);
-
-  useEffect(() => {
-    localStorage.setItem("com_hazards", JSON.stringify(hazards));
-  }, [hazards]);
-
-  useEffect(() => {
-    localStorage.setItem("com_connections", JSON.stringify(connections));
-  }, [connections]);
+    const fetchCommunityData = async () => {
+      try {
+        const [postsRes, hazardsRes] = await Promise.all([
+          api.get("/community/posts"),
+          api.get("/community/hazards")
+        ]);
+        setPosts((postsRes.data.posts || []).map(p => ({ ...p, id: p._id || p.id })));
+        setHazards((hazardsRes.data.hazards || []).map(h => ({ ...h, id: h._id || h.id })));
+      } catch (err) {
+        console.error("Failed to fetch community data:", err);
+      }
+    };
+    fetchCommunityData();
+  }, []);
 
   // Form states for creating a new post
   const [newPostText, setNewPostText] = useState("");
@@ -176,69 +171,53 @@ function DriverDashboard() {
     );
   };
 
-  // Like handler
-  const handleLikePost = (postId) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          const likedBy = post.likedBy || [];
-          const hasLiked = likedBy.includes(user?.email);
-          const newLikedBy = hasLiked
-            ? likedBy.filter(email => email !== user?.email)
-            : [...likedBy, user?.email];
-          const newLikesCount = hasLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-          return { ...post, likes: newLikesCount, likedBy: newLikedBy };
-        }
-        return post;
-      })
-    );
+  // Like handler (BUG-05: now calls backend API)
+  const handleLikePost = async (postId) => {
+    try {
+      const res = await api.post(`/community/posts/${postId}/like`);
+      const updated = { ...res.data, id: res.data._id || res.data.id };
+      setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+    } catch (err) {
+      console.error("Failed to toggle like:", err);
+    }
   };
 
-  // Comment submit
-  const handleSubmitComment = (postId) => {
+  // Comment submit (BUG-05: now calls backend API)
+  const handleSubmitComment = async (postId) => {
     const text = commentInputs[postId];
     if (!text || !text.trim()) return;
 
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          const newComment = {
-            id: `comment-${Date.now()}`,
-            author: user?.name || "Anonymous",
-            content: text
-          };
-          return { ...post, comments: [...post.comments, newComment] };
-        }
-        return post;
-      })
-    );
-    setCommentInputs(prev => ({ ...prev, [postId]: "" }));
+    try {
+      const res = await api.post(`/community/posts/${postId}/comment`, {
+        content: text,
+        author: user?.name || "Anonymous"
+      });
+      const updated = { ...res.data, id: res.data._id || res.data.id };
+      setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      setCommentInputs(prev => ({ ...prev, [postId]: "" }));
+    } catch (err) {
+      console.error("Failed to submit comment:", err);
+    }
   };
 
-  // Create post
-  const handleCreatePost = (e) => {
+  // Create post (BUG-05: now calls backend API)
+  const handleCreatePost = async (e) => {
     e.preventDefault();
     if (!newPostText.trim() && !postImageBase64) return;
 
-    const newPost = {
-      id: `post-${Date.now()}`,
-      author: {
-        name: user?.name || "Anonymous User",
-        role: "driver",
-        avatar: "🚑"
-      },
-      content: newPostText,
-      image: postImageBase64,
-      likes: 0,
-      likedBy: [],
-      comments: [],
-      createdAt: new Date().toISOString()
-    };
-
-    setPosts([newPost, ...posts]);
-    setNewPostText("");
-    setPostImageBase64(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    try {
+      const res = await api.post("/community/posts", {
+        content: newPostText,
+        image: postImageBase64
+      });
+      const newPost = { ...res.data, id: res.data._id || res.data.id };
+      setPosts(prev => [newPost, ...prev]);
+      setNewPostText("");
+      setPostImageBase64(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      console.error("Failed to create post:", err);
+    }
   };
 
   // Photo uploads
@@ -252,52 +231,36 @@ function DriverDashboard() {
     }
   };
 
-  // Upvote hazard
-  const handleUpvoteHazard = (hazardId) => {
-    setHazards(prevHazards =>
-      prevHazards.map(haz => {
-        if (haz.id === hazardId) {
-          const upvotedBy = haz.upvotedBy || [];
-          const hasUpvoted = upvotedBy.includes(user?.email);
-          if (hasUpvoted) {
-            return {
-              ...haz,
-              upvotes: Math.max(0, haz.upvotes - 1),
-              upvotedBy: upvotedBy.filter(email => email !== user?.email)
-            };
-          } else {
-            return {
-              ...haz,
-              upvotes: haz.upvotes + 1,
-              upvotedBy: [...upvotedBy, user?.email]
-            };
-          }
-        }
-        return haz;
-      })
-    );
+  // Upvote hazard (BUG-05: now calls backend API)
+  const handleUpvoteHazard = async (hazardId) => {
+    try {
+      const res = await api.post(`/community/hazards/${hazardId}/upvote`);
+      const updated = { ...res.data, id: res.data._id || res.data.id };
+      setHazards(prev => prev.map(h => h.id === hazardId ? updated : h));
+    } catch (err) {
+      console.error("Failed to upvote hazard:", err);
+    }
   };
 
-  // Create hazard
-  const handleCreateHazard = (e) => {
+  // Create hazard (BUG-05: now calls backend API)
+  const handleCreateHazard = async (e) => {
     e.preventDefault();
     if (!hazardForm.route.trim() || !hazardForm.description.trim()) return;
 
-    const newHazard = {
-      id: `hazard-${Date.now()}`,
-      route: hazardForm.route,
-      type: hazardForm.type,
-      severity: hazardForm.severity,
-      description: hazardForm.description,
-      upvotes: 0,
-      upvotedBy: [],
-      author: user?.name || "Anonymous Paramedic",
-      createdAt: new Date().toISOString()
-    };
-
-    setHazards([newHazard, ...hazards]);
-    setHazardForm({ route: "", type: "Potholes", severity: "medium", description: "" });
-    alert("Road hazard broadcasted to emergency network!");
+    try {
+      const res = await api.post("/community/hazards", {
+        route: hazardForm.route,
+        type: hazardForm.type,
+        severity: hazardForm.severity,
+        description: hazardForm.description
+      });
+      const newHazard = { ...res.data, id: res.data._id || res.data.id };
+      setHazards(prev => [newHazard, ...prev]);
+      setHazardForm({ route: "", type: "Potholes", severity: "medium", description: "" });
+      alert("Road hazard broadcasted to emergency network!");
+    } catch (err) {
+      console.error("Failed to report hazard:", err);
+    }
   };
 
   const sortedHazards = [...hazards].sort((a, b) => b.upvotes - a.upvotes);

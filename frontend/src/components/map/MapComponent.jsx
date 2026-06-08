@@ -9,7 +9,6 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useState } from 'react';
-import socket from '../../socket/socket';
 import api from "../../services/api.js";
 import Radar from "radar-sdk-js";
 
@@ -157,29 +156,9 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
         fetchHospitals();
     }, [status, driverLocation, hasValidPatientCoords, patientLocation?.lat, patientLocation?.lng]);
 
-    // Socket Listener
-    useEffect(() => {
-
-  socket.on("driverLocationUpdated", (data) => {
-
-    console.log("Location updated", data);
-
-    setAmbulanceLocation({
-      lat: data.lat,
-      lng: data.lng,
-    });
-
-  });
-
-
-
-  return () => {
-
-    socket.off("driverLocationUpdated");
-
-  };
-
-}, []);
+    // NOTE: driverLocationUpdated listener removed here (BUG-10).
+    // EmergencyContext already listens for this event and passes driverLocation as a prop.
+    // Having dual listeners caused double-firing and state drift.
 
     useEffect(() => {
         if(driverLocation){

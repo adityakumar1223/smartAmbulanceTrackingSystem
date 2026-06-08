@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { protect } = require("../middleware/authMiddleware.js");
+const User = require("../models/user.js");
 const Post = require("../models/post.js");
 const Hazard = require("../models/hazard.js");
 
@@ -120,12 +121,16 @@ router.get("/posts", protect, async (req, res) => {
 router.post("/posts", protect, async (req, res) => {
   try {
     const { content, image } = req.body;
-    const authorAvatar = req.user.role === "driver" ? "🚑" : req.user.role === "hospital" ? "🏥" : req.user.role === "admin" ? "🛡️" : "👤";
+    // Fetch full user from DB since JWT only contains id and role (BUG-06)
+    const fullUser = await User.findById(req.user.id).select("name username role");
+    const authorName = fullUser?.name || fullUser?.username || "Anonymous User";
+    const authorRole = fullUser?.role || req.user.role || "patient";
+    const authorAvatar = authorRole === "driver" ? "🚑" : authorRole === "hospital" ? "🏥" : authorRole === "admin" ? "🛡️" : "👤";
     
     const newPost = new Post({
       author: {
-        name: req.user.username || req.user.name || "Anonymous User",
-        role: req.user.role || "patient",
+        name: authorName,
+        role: authorRole,
         avatar: authorAvatar
       },
       content,
@@ -194,9 +199,13 @@ router.post("/posts/:id/comment", protect, async (req, res) => {
       return res.status(404).json({ message: "Social post not found" });
     }
 
+    // Fetch full user from DB for comment author name (BUG-06)
+    const fullUser = await User.findById(req.user.id).select("name username");
+    const authorName = fullUser?.name || fullUser?.username || author || "Anonymous";
+
     post.comments.push({
       id: commentId || `c-${Date.now()}`,
-      author: author || req.user.name || "Anonymous",
+      author: authorName,
       content,
       createdAt: new Date()
     });
@@ -232,6 +241,10 @@ router.post("/hazards", protect, async (req, res) => {
   try {
     const { route, type, severity, description } = req.body;
     
+    // Fetch full user from DB for hazard author name (BUG-06)
+    const fullUser = await User.findById(req.user.id).select("name username");
+    const authorName = fullUser?.name || fullUser?.username || "Anonymous User";
+
     const newHazard = new Hazard({
       route,
       type,
@@ -239,7 +252,7 @@ router.post("/hazards", protect, async (req, res) => {
       description,
       upvotes: 0,
       upvotedBy: [],
-      author: req.user.name || "Anonymous User",
+      author: authorName,
       createdAt: new Date()
     });
 

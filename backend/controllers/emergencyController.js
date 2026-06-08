@@ -1,5 +1,6 @@
 const emergencyRequest = require("../models/emergencyRequest.js");
 const User = require("../models/user.js");
+const bcrypt = require("bcryptjs");
 const { getIo } = require('../sockets/socket.js');
 
 const createEmergencyRequest = async (req, res) => {
@@ -194,11 +195,12 @@ const createAnonymousSOSEmergency = async (req, res) => {
         let anonymousUser = await User.findOne({ email: "sos@system.local" });
         if (!anonymousUser) {
             // Create a system-wide SOS placeholder user to satisfy schema references
+            const hashedPassword = await bcrypt.hash("system_generated_sos_password_123", 8);
             anonymousUser = await User.create({
                 name: "Anonymous SOS Caller",
                 email: "sos@system.local",
                 username: "anonymous_sos",
-                password: "system_generated_sos_password_123",
+                password: hashedPassword,
                 role: "patient"
             });
         }

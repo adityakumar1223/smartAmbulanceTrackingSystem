@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 import { Link } from "react-router-dom";
 import api from "../../services/api.js";
 import socket from "../../socket/socket.js";
 import { useAuth } from "../../context/AuthContext";
 import LogoutButton from "../../components/LogoutButton.jsx";
+import MapComponent from "../../components/map/MapComponent.jsx";
 import { 
   FiActivity, FiTruck, FiUsers, FiCompass, FiAlertCircle, FiSettings,
   FiInfo, FiFileText, FiClock, FiImage, FiX, FiThumbsUp, FiMessageCircle,
-  FiSend, FiUserPlus, FiUser, FiMapPin, FiMenu
+  FiSend, FiUserPlus, FiUser, FiMapPin, FiMenu, FiAlertTriangle
 } from "react-icons/fi";
 
 // Initial Seed Data for the Social Feed
@@ -90,6 +91,10 @@ function HospitalDashboard() {
   // BASE STATES FOR HOSPITAL
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Real-time tracking states
+  const [driverLocations, setDriverLocations] = useState({});
+  const [selectedTripForMap, setSelectedTripForMap] = useState(null);
 
   // ----------------------------------------------------
   // TABS STATE: CAPACITY CONFIG (Persists in localStorage)
@@ -308,8 +313,6 @@ function HospitalDashboard() {
     alert("Road hazard broadcasted to emergency network!");
   };
 
-  const sortedHazards = [...hazards].sort((a, b) => b.upvotes - a.upvotes);
-
   const fetchIncidents = async () => {
     try {
       setLoading(true);
@@ -338,30 +341,49 @@ function HospitalDashboard() {
       setRequests(prev => prev.map(r => r._id === updatedRequest._id ? updatedRequest : r));
     });
 
+    // Real-time driver location updates
+    socket.on("driverLocationUpdated", (data) => {
+      if (data && data.driverId) {
+        setDriverLocations(prev => ({
+          ...prev,
+          [data.driverId]: { lat: data.lat, lng: data.lng, updatedAt: Date.now() }
+        }));
+      }
+    });
+
     return () => {
       socket.off("emergencyRequest");
       socket.off("emergencyStatusUpdated");
       socket.off("emergencyAccepted");
+      socket.off("driverLocationUpdated");
     };
   }, []);
 
   // Filter incoming emergencies (accepted, en route, or arrived)
   const incomingAmbulances = requests.filter(
-    (r) => r.status === "accepted" || r.status === "on_the_way" || r.status === "arrived"
+    (r) => r && (r.status === "accepted" || r.status === "on_the_way" || r.status === "arrived")
   );
 
-  // Statistics calculation
   const totalIncoming = incomingAmbulances.length;
+
+  // Split into onboard patients vs en-route dispatches
+  const ambulancesWithPatient = incomingAmbulances.filter(r => r && r.status === "arrived");
+  const ambulancesEnRoute = incomingAmbulances.filter(r => r && (r.status === "accepted" || r.status === "on_the_way"));
+
+  // Statistics calculation
+  const patientsOnboardCount = ambulancesWithPatient.length;
   const criticalCardiac = incomingAmbulances.filter(r => r.emergencyType === "heart_attack").length;
   const criticalAccident = incomingAmbulances.filter(r => r.emergencyType === "accident").length;
   const activePregnancy = incomingAmbulances.filter(r => r.emergencyType === "pregnancy").length;
 
   const stats = [
-    { label: "Active Ambulances Incoming", value: totalIncoming, desc: "Ambulances en route", icon: <FiTruck className="w-5 h-5 text-red-400" />, color: "bg-red-500/10 border-red-500/20 text-red-400" },
+    { label: "Patients Onboard", value: patientsOnboardCount, desc: "Active transit to hospital", icon: <FiActivity className="w-5 h-5 text-red-400 animate-pulse" />, color: "bg-red-500/10 border-red-500/20 text-red-400" },
+    { label: "Ambulances Dispatched", value: ambulancesEnRoute.length, desc: "En route to pick up", icon: <FiTruck className="w-5 h-5 text-blue-400" />, color: "bg-blue-500/10 border-blue-500/20 text-blue-400" },
     { label: "Cardiac Alerts", value: criticalCardiac, desc: "Triage room required", icon: <FiAlertCircle className="w-5 h-5 text-yellow-400" />, color: "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" },
-    { label: "Trauma Accidents", value: criticalAccident, desc: "Surgical crew on standby", icon: <FiActivity className="w-5 h-5 text-purple-400" />, color: "bg-purple-500/10 border-purple-500/20 text-purple-400" },
-    { label: "Pregnancy Cases", value: activePregnancy, desc: "OBGYN ward notified", icon: <FiUsers className="w-5 h-5 text-green-400" />, color: "bg-green-500/10 border-green-500/20 text-green-400" },
+    { label: "Trauma / Maternity", value: criticalAccident + activePregnancy, desc: "Specialist crew alert", icon: <FiUsers className="w-5 h-5 text-green-400" />, color: "bg-green-500/10 border-green-500/20 text-green-400" },
   ];
+
+  const sortedHazards = [...hazards].sort((a, b) => b.upvotes - a.upvotes);
 
   return (
     <div className="min-h-screen bg-[#0e1015] text-[#9ca3af] font-sans flex flex-col md:flex-row w-full overflow-hidden">
@@ -860,15 +882,116 @@ function HospitalDashboard() {
               ))}
             </div>
 
-            {/* Live Incoming Radar Grid */}
+            {/* Section 1: Ambulances with Patient Onboard */}
             <div className="bg-[#161a23] border border-gray-800 p-6 rounded-3xl shadow-xl space-y-6">
               <div className="flex justify-between items-center border-b border-gray-800 pb-4">
                 <div className="space-y-1">
                   <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <FiCompass className="animate-spin text-red-500" />
-                    <span>Live Incoming Ambulance Radar</span>
+                    <FiActivity className="text-red-500 animate-pulse" />
+                    <span>Ambulances with Patient Onboard</span>
                   </h2>
-                  <p className="text-xs text-gray-500">List of ambulances with active, en-route patient delivery states.</p>
+                  <p className="text-xs text-gray-500">Active medical transport. Patient is inside the ambulance and heading to trauma room.</p>
+                </div>
+                <span className="px-2.5 py-1 bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-mono font-bold uppercase rounded-xl">
+                  {ambulancesWithPatient.length} Active Onboard
+                </span>
+              </div>
+
+              {ambulancesWithPatient.length === 0 ? (
+                <div className="py-12 text-center text-gray-500 border border-dashed border-gray-800 rounded-2xl bg-[#12141c]/40">
+                  <FiTruck className="w-8 h-8 mx-auto mb-2 text-gray-700 animate-pulse" />
+                  <span className="text-xs font-medium">No ambulances with onboard patients at this time.</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {ambulancesWithPatient.map((req) => {
+                    const hasCoords = !!driverLocations[req.driverId?._id];
+                    return (
+                      <div 
+                        key={req._id} 
+                        className="bg-gradient-to-br from-[#1b1e28] to-[#12141c] border border-red-500/15 hover:border-red-500/35 p-5 rounded-2xl shadow-lg relative overflow-hidden transition-all duration-300 flex flex-col justify-between gap-4 group hover:shadow-red-950/5"
+                      >
+                        {/* Status / Title */}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-500 block uppercase tracking-wider font-mono">Ambulance Unit</span>
+                            <span className="text-sm font-black text-white group-hover:text-red-400 transition-colors">
+                              Unit #{(req._id || "unknown").substring((req._id || "unknown").length - 6).toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 text-[9px] font-bold uppercase text-red-400 px-2.5 py-0.5 rounded-full animate-pulse">
+                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>
+                            Patient Onboard
+                          </span>
+                        </div>
+
+                        {/* Patient info & Priority */}
+                        <div className="space-y-3 bg-[#161a23]/80 p-4 border border-gray-800 rounded-xl">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500 font-medium">Patient Name:</span>
+                            <span className="font-bold text-white">{req.patientId?.name || "Anonymous SOS"}</span>
+                          </div>
+                          
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-500 font-medium">Triage Priority:</span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black capitalize border ${
+                              req.emergencyType === "heart_attack" ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                              req.emergencyType === "accident" ? "bg-purple-500/10 border-purple-500/20 text-purple-400" :
+                              req.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
+                              "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                            }`}>
+                              {(req.emergencyType || "medical_emergency").replace("_", " ")}
+                            </span>
+                          </div>
+
+                          <div className="border-t border-gray-800/50 pt-2 text-[11px]">
+                            <span className="text-gray-500 block mb-0.5 uppercase tracking-wide font-mono text-[8px]">Triage Condition Notes:</span>
+                            <p className="text-gray-300 italic truncate font-medium">
+                              "{req.patientNotes || "No condition notes logged."}"
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Crew & Live tracking info */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex justify-between items-center text-[10px] text-gray-500 font-semibold font-mono">
+                            <span>Crew Leader:</span>
+                            <span className="text-gray-300">{req.driverId?.name || "Assigned Driver"}</span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-gray-500 font-semibold font-mono">Telemetry:</span>
+                            <span className={`font-bold flex items-center gap-1 ${hasCoords ? "text-green-400" : "text-amber-400"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${hasCoords ? "bg-green-500 animate-ping" : "bg-amber-500 animate-pulse"}`}></span>
+                              {hasCoords ? "GPS Active" : "Waiting for GPS..."}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Track Action Button */}
+                        <button
+                          onClick={() => setSelectedTripForMap(req)}
+                          className="w-full py-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/25 hover:border-transparent rounded-xl text-xs font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                        >
+                          <FiCompass className="w-3.5 h-3.5" />
+                          <span>Track Live Route</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Dispatched/En-route Table */}
+            <div className="bg-[#161a23] border border-gray-800 p-6 rounded-3xl shadow-xl space-y-6">
+              <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <FiCompass className="text-blue-500" />
+                    <span>Ambulances En Route to Patient (Dispatched)</span>
+                  </h2>
+                  <p className="text-xs text-gray-500">Rescue units en route to stabilize and board the patient.</p>
                 </div>
                 <button
                   onClick={fetchIncidents}
@@ -888,22 +1011,23 @@ function HospitalDashboard() {
                       <th className="py-3 px-4">En Route Status</th>
                       <th className="py-3 px-4 hidden md:table-cell">Triage Notes</th>
                       <th className="py-3 px-4 hidden sm:table-cell">Report Time</th>
+                      <th className="py-3 px-4">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-800/40 text-xs">
-                    {incomingAmbulances.length === 0 ? (
+                    {ambulancesEnRoute.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-gray-500">
+                        <td colSpan={7} className="py-12 text-center text-gray-500">
                           <FiTruck className="w-10 h-10 mx-auto mb-3 text-gray-700 animate-pulse" />
-                          <span>No active incoming ambulances on radar. All clear.</span>
+                          <span>No en-route dispatched ambulances on radar. All clear.</span>
                         </td>
                       </tr>
                     ) : (
-                      incomingAmbulances.map((req) => (
+                      ambulancesEnRoute.map((req) => (
                         <tr key={req._id} className="hover:bg-[#1e2330]/20 transition">
                           <td className="py-4 px-4 font-bold text-white flex items-center gap-2">
                             <FiTruck className="text-red-500 animate-pulse" />
-                            <span>Unit #{req._id.substring(req._id.length - 6).toUpperCase()}</span>
+                            <span>Unit #{((req._id || "unknown").substring((req._id || "unknown").length - 6)).toUpperCase()}</span>
                           </td>
                           <td className="py-4 px-4">
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize border ${
@@ -912,20 +1036,29 @@ function HospitalDashboard() {
                               req.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
                               "bg-blue-500/10 border-blue-500/20 text-blue-400"
                             }`}>
-                              {req.emergencyType.replace("_", " ")}
+                              {(req.emergencyType || "medical_emergency").replace("_", " ")}
                             </span>
                           </td>
                           <td className="py-4 px-4 font-semibold">{req.patientId?.name || "Anonymous Incident"}</td>
                           <td className="py-4 px-4">
                             <span className="flex items-center gap-1.5 text-blue-400 font-bold uppercase tracking-wider text-[10px]">
                               <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping"></span>
-                              {req.status.replace("_", " ")}
+                              {(req.status || "pending").replace("_", " ")}
                             </span>
                           </td>
                           <td className="py-4 px-4 max-w-xs truncate italic text-gray-400 hidden md:table-cell">
                             "{req.patientNotes || "No condition notes logged."}"
                           </td>
                           <td className="py-4 px-4 text-gray-500 hidden sm:table-cell">{new Date(req.createdAt).toLocaleTimeString()}</td>
+                          <td className="py-4 px-4">
+                            <button
+                              onClick={() => setSelectedTripForMap(req)}
+                              className="py-1 px-3.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 hover:border-transparent rounded-xl text-[10px] uppercase font-bold transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <FiCompass className="w-3.5 h-3.5" />
+                              <span>Track</span>
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -933,6 +1066,80 @@ function HospitalDashboard() {
                 </table>
               </div>
             </div>
+
+            {/* Live GPS Tracking Modal Overlay */}
+            {selectedTripForMap && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+                <div className="bg-[#161a23] border border-gray-800 rounded-3xl w-full max-w-4xl p-6 relative flex flex-col gap-4 max-h-[90vh]">
+                  {/* Modal Header */}
+                  <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                    <div>
+                      <span className="text-xs font-bold text-red-500 uppercase tracking-widest bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20">
+                        Unit #{selectedTripForMap._id.substring(selectedTripForMap._id.length - 6).toUpperCase()} Live Tracking
+                      </span>
+                      <h2 className="text-lg font-bold text-white mt-1">Real-time Patient Transit Route</h2>
+                    </div>
+                    <button
+                      onClick={() => setSelectedTripForMap(null)}
+                      className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800/40 rounded-xl transition cursor-pointer"
+                    >
+                      <FiX className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Modal Info Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs bg-[#1e2330]/45 p-4 border border-gray-800/60 rounded-2xl">
+                    <div>
+                      <span className="text-gray-500 block uppercase font-mono text-[9px] tracking-wider">Patient Name</span>
+                      <span className="font-bold text-white text-sm">{selectedTripForMap.patientId?.name || "Anonymous Incident"}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block uppercase font-mono text-[9px] tracking-wider">Trauma Case</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize border inline-block mt-0.5 ${
+                        selectedTripForMap.emergencyType === "heart_attack" ? "bg-red-500/10 border-red-500/20 text-red-400" :
+                        selectedTripForMap.emergencyType === "accident" ? "bg-purple-500/10 border-purple-500/25 text-purple-400" :
+                        selectedTripForMap.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
+                        "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                      }`}>
+                        {(selectedTripForMap.emergencyType || "medical_emergency").replace("_", " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block uppercase font-mono text-[9px] tracking-wider">EMS Crew Leader</span>
+                      <span className="font-bold text-white text-sm">{selectedTripForMap.driverId?.name || "Assigned Driver"}</span>
+                    </div>
+                  </div>
+
+                  {/* Modal Map Frame */}
+                  <div className="flex-grow min-h-[350px] md:min-h-[450px] rounded-2xl overflow-hidden border border-gray-800 relative z-0">
+                    <MapComponent
+                      pickupLocation={selectedTripForMap.pickupLocation}
+                      driverLocation={driverLocations[selectedTripForMap.driverId?._id] || null}
+                      dropoffLocation={selectedTripForMap.dropoffLocation}
+                      status={selectedTripForMap.status}
+                    />
+                  </div>
+
+                  {/* Modal Footer telemetry status */}
+                  <div className="flex justify-between items-center text-[10px] text-gray-500 pt-2 border-t border-gray-800/80">
+                    <span>GPS Sync Status:</span>
+                    <span className="font-bold flex items-center gap-1">
+                      {driverLocations[selectedTripForMap.driverId?._id] ? (
+                        <>
+                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span>
+                          <span className="text-green-400">Receiving Live Telemetry</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                          <span className="text-amber-400">Waiting for Driver Location Update...</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1108,4 +1315,53 @@ function HospitalDashboard() {
   );
 }
 
-export default HospitalDashboard;
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-red-955 text-red-100 min-h-screen font-sans flex flex-col justify-center items-center">
+          <div className="max-w-2xl w-full bg-black/45 border border-red-500/25 p-8 rounded-3xl space-y-4 shadow-2xl">
+            <h1 className="text-2xl font-bold flex items-center gap-2 text-red-400">
+              <span className="animate-pulse">🚨</span> Something went wrong in the Hospital Dashboard
+            </h1>
+            <p className="text-sm font-semibold">Error message: {this.state.error?.message || String(this.state.error)}</p>
+            <pre className="p-4 bg-black/40 rounded-xl overflow-auto text-xs font-mono max-h-96 text-red-300 border border-gray-800">
+              {this.state.error?.stack}
+            </pre>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-550 rounded-xl font-bold transition text-xs uppercase tracking-wider cursor-pointer text-white"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function HospitalDashboardWithErrorBoundary(props) {
+  return (
+    <ErrorBoundary>
+      <HospitalDashboard {...props} />
+    </ErrorBoundary>
+  );
+}
+
+export default HospitalDashboardWithErrorBoundary;

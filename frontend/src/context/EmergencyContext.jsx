@@ -131,7 +131,7 @@ export const EmergencyProvider = ({children}) => {
 
             return () => {
                 socket.off("driverLocationUpdated");
-                socket.off("emergencyStatusUpdate");
+                socket.off("emergencyStatusUpdated");
                 socket.off("emergencyAccepted");
             };
             

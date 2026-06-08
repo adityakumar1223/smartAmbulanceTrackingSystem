@@ -1,9 +1,11 @@
 import { Navigate, Link } from 'react-router-dom';
 import { FiAlertTriangle } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
 
 function ProtectedRoute({ children, allowedRole }) {
+    const { user, loading } = useAuth();
     const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
+    const role = user?.role || localStorage.getItem("role");
 
     if (!token) {
         return <Navigate to="/" replace />;

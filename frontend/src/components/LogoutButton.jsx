@@ -1,14 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { FiLogOut } from "react-icons/fi";
 
 function LogoutButton(){
     const navigate = useNavigate();
+    const { logout } = useAuth();
 
     const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("user");
-
+        logout(); // Clears AuthContext state + localStorage in one call
         navigate("/", {
             replace: true,
         });

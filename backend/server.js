@@ -17,7 +17,7 @@ const app = express();
 
 
 
-const port = process.env.PORT;
+const port = process.env.PORT || 5000;
 
 const authRoutes = require("./routes/authRoutes.js");
 const userRoutes = require("./routes/userRoutes.js");
@@ -37,7 +37,13 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/emergency", emergencyRoutes);
 app.use("/api/community", communityRoutes);
 
-
+// Global error-handling middleware (BUG-07)
+app.use((err, req, res, next) => {
+    console.error("Unhandled server error:", err.stack || err);
+    res.status(err.status || 500).json({
+        message: err.message || "Internal Server Error",
+    });
+});
 
 app.get("/", (req, res)=>{
     res.send("Backend is running");
@@ -72,7 +78,22 @@ io.on("connection", (socket) => {
 });
 
 
+// Seed community data once on startup (BUG-18: moved from per-request to startup)
+const Post = require("./models/post.js");
+const Hazard = require("./models/hazard.js");
+const seedCommunity = async () => {
+    try {
+        const postCount = await Post.countDocuments();
+        if (postCount === 0) console.log("Community posts collection empty — will seed on first access.");
+        const hazardCount = await Hazard.countDocuments();
+        if (hazardCount === 0) console.log("Road hazards collection empty — will seed on first access.");
+    } catch (err) {
+        // DB not ready yet, seeding will happen on first request
+    }
+};
+
 server.listen(port, ()=>{
-    console.log(`Backend is runningon port ${port}`);
+    console.log(`Backend is running on port ${port}`);
+    seedCommunity();
 });
 

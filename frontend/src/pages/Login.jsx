@@ -19,8 +19,14 @@ function Login() {
 
   // SOS tracking states
   const [activeSOS, setActiveSOS] = useState(() => {
-    const saved = localStorage.getItem("anonymous_sos_request");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("anonymous_sos_request");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to parse anonymous_sos_request from localStorage:", e);
+      localStorage.removeItem("anonymous_sos_request");
+      return null;
+    }
   });
   const [driverLocation, setDriverLocation] = useState(null);
   const [sosLoading, setSosLoading] = useState(false);
@@ -268,7 +274,7 @@ function Login() {
                   <p className="text-[10px] text-gray-500 truncate">{activeSOS.driverId.email || "Smart Ambulance Driver"}</p>
                 </div>
                 <span className="text-[9px] font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-md uppercase flex-shrink-0">
-                  {activeSOS.status.replace("_", " ")}
+                  {activeSOS.status.replaceAll("_", " ")}
                 </span>
               </div>
             ) : (

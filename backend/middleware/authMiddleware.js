@@ -1,59 +1,44 @@
 const jwt = require("jsonwebtoken");
 
-const protect = async (req, res, next) =>{
-
+const protect = async (req, res, next) => {
     let token;
 
     try {
-        //check authorization header
-        if(
+        if (
             req.headers.authorization &&
             req.headers.authorization.startsWith("Bearer")
-        ){
-            token = req.headers.authorization.split(" ")[1]
+        ) {
+            token = req.headers.authorization.split(" ")[1];
 
-            //verify token
-            const decoded = jwt.verify(
-                token,
-                process.env.JWT_SECRET
-            );
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            //store user data in request
             req.user = decoded;
-
             next();
 
-        }else{
-
+        } else {
             return res.status(401).json({
-                message: "not authorized, no token",
-            })
-            
+                message: "Not authorized. Please log in.",
+            });
         }
-        
-        
+
     } catch (error) {
+        // FIX #17: Use a generic message — do not hint whether the token was present/expired/malformed
         return res.status(401).json({
-            message: "Token failed",
-        })
+            message: "Not authorized. Please log in.",
+        });
     }
-    
 };
 
-
-const authorizeRoles = (...roles) =>{
-        return (req, res, next)=>{
-            if(!roles.includes(req.user.role)){
-                
-                console.log(req.user.role);
-                
-                return res.status(403).json({
-                    message: "Acess denied",
-                });
-            }
-
-            next();
-        };
+const authorizeRoles = (...roles) => {
+    return (req, res, next) => {
+        if (!roles.includes(req.user.role)) {
+            // FIX #33: Removed console.log(req.user.role) — no role leakage to logs in production
+            return res.status(403).json({
+                message: "Access denied. You do not have permission for this action.",
+            });
+        }
+        next();
+    };
 };
 
-module.exports = {protect, authorizeRoles};
+module.exports = { protect, authorizeRoles };

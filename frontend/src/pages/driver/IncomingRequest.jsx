@@ -24,7 +24,7 @@ const IncomingRequest = ({ request, onAccept, loading }) => {
             <span className="text-gray-500 font-semibold">Severity / Type:</span>
             <span className="text-white capitalize font-bold text-base flex items-center gap-1.5 text-red-500">
               <FiAlertTriangle />
-              {request.emergencyType.replace("_", " ")}
+              {request.emergencyType.replaceAll("_", " ")}
             </span>
           </div>
           
@@ -36,7 +36,7 @@ const IncomingRequest = ({ request, onAccept, loading }) => {
           <div className="space-y-1">
             <span className="text-gray-500 font-semibold block">Incident Location Notes:</span>
             <p className="text-gray-300 italic text-xs leading-relaxed">
-              "{request.patientNotes || "No condition comments provided."}"
+              &quot;{request.patientNotes || 'No condition comments provided.'}&quot;
             </p>
           </div>
         </div>

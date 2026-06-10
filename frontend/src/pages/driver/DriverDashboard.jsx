@@ -5,6 +5,7 @@ import Radar from "radar-sdk-js";
 import { useAuth } from "../../context/AuthContext";
 import { useEmergency } from "../../context/EmergencyContext";
 import api from "../../services/api.js";
+import EmergencyChat from "../../components/chat/EmergencyChat.jsx";
 import LogoutButton from "../../components/LogoutButton.jsx";
 import DriverStats from "./DriverStats.jsx";
 import IncomingRequest from "./IncomingRequest.jsx";
@@ -97,7 +98,13 @@ function DriverDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // DRIVER STATUS & TRIP STATE
-  const [isOnline, setIsOnline] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => {
+    return localStorage.getItem("driver_is_online") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("driver_is_online", isOnline.toString());
+  }, [isOnline]);
   const [activeTrip, setActiveTrip] = useState(null);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [incomingRequestAlert, setIncomingRequestAlert] = useState(null);
@@ -106,6 +113,128 @@ function DriverDashboard() {
   const [loading, setLoading] = useState(false);
 
   const watchIdRef = useRef(null);
+
+  const isOnlineRef = useRef(isOnline);
+  isOnlineRef.current = isOnline;
+
+  const activeTripRef = useRef(activeTrip);
+  activeTripRef.current = activeTrip;
+
+  const incomingRequestAlertRef = useRef(incomingRequestAlert);
+  incomingRequestAlertRef.current = incomingRequestAlert;
+
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  // MANUAL LOCATION UPDATE & OVERRIDE STATES
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
+  const [isManualLocation, setIsManualLocation] = useState(false);
+
+  // Fetch full user profile on mount to restore override coordinates and sticky state
+  useEffect(() => {
+    const fetchOverrideState = async () => {
+      try {
+        const res = await api.get("/user/profile");
+        const dbUser = res.data.user;
+        if (dbUser) {
+          if (dbUser.isManualLocation || dbUser.isManualOverride) {
+            setIsManualLocation(true);
+            if (dbUser.location && dbUser.location.coordinates && dbUser.location.coordinates.length >= 2) {
+              const lng = dbUser.location.coordinates[0];
+              const lat = dbUser.location.coordinates[1];
+              setDriverLocation({ lat, lng });
+              setManualLat(lat.toString());
+              setManualLng(lng.toString());
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching user profile override details:", err);
+      }
+    };
+    if (user) {
+      fetchOverrideState();
+    }
+  }, [user]);
+
+  const handleGetDeviceLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setManualLat(position.coords.latitude.toFixed(6));
+          setManualLng(position.coords.longitude.toFixed(6));
+        },
+        (error) => {
+          console.error("Error obtaining Geolocation:", error);
+          alert("Failed to obtain device location. Please check browser permissions.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
+  };
+
+  const handleManualLocationSubmit = (e) => {
+    e.preventDefault();
+    if (!manualLat || !manualLng) {
+      alert("Please enter both latitude and longitude.");
+      return;
+    }
+
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("Coordinates must be valid numbers.");
+      return;
+    }
+
+    socket.emit("manual_location_update", {
+      userId: user?.id || user?._id,
+      latitude: lat,
+      longitude: lng
+    });
+
+    setIsManualLocation(true);
+    setDriverLocation({ lat, lng });
+    alert("Manual Location Override Activated! Location saved and persisted.");
+  };
+
+  const handleResetToGps = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          socket.emit("reset_location_override", {
+            userId: user?.id || user?._id
+          });
+          
+          setIsManualLocation(false);
+          setDriverLocation({ lat, lng });
+          setManualLat(lat.toFixed(6));
+          setManualLng(lng.toFixed(6));
+          
+          // Emit coordinates over socket to overwrite manual state for other clients
+          socket.emit("driverLocationUpdate", {
+            lat,
+            lng,
+            driverId: user?.id || user?._id
+          });
+          
+          alert("Manual Override disabled. Reset to auto GPS tracking!");
+        },
+        (error) => {
+          console.error("GPS reset error:", error);
+          alert("Failed to obtain device GPS. Override remains active.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
+  };
 
   // ----------------------------------------------------
   // TABS STATE: EMBEDDED COMMUNITY (BUG-05: Now synced with backend API)
@@ -267,6 +396,11 @@ function DriverDashboard() {
 
   // Fetch initial driver requests and pending pool
   useEffect(() => {
+    if (!user) {
+      setActiveTrip(null);
+      setPendingRequests([]);
+      return;
+    }
     const initDashboard = async () => {
       try {
         setLoading(true);
@@ -289,7 +423,7 @@ function DriverDashboard() {
     };
 
     initDashboard();
-  }, []);
+  }, [user]);
 
   // Set identity when user changes
   useEffect(() => {
@@ -305,7 +439,25 @@ function DriverDashboard() {
 
   // Sync online GPS tracking and Socket emissions
   useEffect(() => {
+    const uId = user?.id || user?._id;
     if (isOnline) {
+      if (isManualLocation) {
+        if (driverLocation) {
+          socket.emit("driverLocationUpdate", {
+            lat: driverLocation.lat,
+            lng: driverLocation.lng,
+            driverId: uId
+          });
+          console.log("Broadcasted manual location override to socket server:", driverLocation);
+        }
+        // Clear active GPS tracking watch if it was running
+        if (watchIdRef.current) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
+        return;
+      }
+
       // Initial trackOnce
       Radar.trackOnce()
         .then((result) => {
@@ -313,7 +465,7 @@ function DriverDashboard() {
             const locData = {
               lat: result.location.latitude,
               lng: result.location.longitude,
-              driverId: user?.id
+              driverId: uId
             };
             setDriverLocation({ lat: locData.lat, lng: locData.lng });
             socket.emit("driverLocationUpdate", locData);
@@ -327,7 +479,7 @@ function DriverDashboard() {
             const locData = {
               lat: position.coords.latitude,
               lng: position.coords.longitude,
-              driverId: user?.id
+              driverId: uId
             };
             setDriverLocation({ lat: locData.lat, lng: locData.lng });
             
@@ -355,7 +507,9 @@ function DriverDashboard() {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      setDriverLocation(null);
+      if (!isManualLocation) {
+        setDriverLocation(null);
+      }
     }
 
     return () => {
@@ -363,56 +517,80 @@ function DriverDashboard() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [isOnline, user?.id]);
+  }, [isOnline, user?.id, user?._id, isManualLocation]);
 
   // Real-time Socket Event Listeners
   useEffect(() => {
-    socket.on("emergencyRequest", (newRequest) => {
+    const handleEmergencyRequest = (newRequest) => {
       console.log("Real-time emergency broadcast received:", newRequest);
       setPendingRequests(prev => [newRequest, ...prev]);
 
-      if (isOnline && !activeTrip) {
+      if (isOnlineRef.current && !activeTripRef.current) {
         setIncomingRequestAlert(newRequest);
       }
-    });
+    };
 
-    socket.on("emergencyStatusUpdated", (updatedRequest) => {
+    const handleEmergencyStatusUpdated = (updatedRequest) => {
       setPendingRequests(prev => prev.filter(r => r._id !== updatedRequest._id));
       
-      if (activeTrip && activeTrip._id === updatedRequest._id) {
+      const driverIdStr = updatedRequest.driverId?._id || updatedRequest.driverId;
+      const myIdStr = userRef.current?.id || userRef.current?._id;
+
+      if (driverIdStr && myIdStr && driverIdStr.toString() === myIdStr.toString()) {
         if (updatedRequest.status === "completed" || updatedRequest.status === "cancelled") {
           setActiveTrip(null);
-          alert(`Rescue mission ${updatedRequest.status}! Dashboard reset.`);
+          if (!updatedRequest.clearedBySwitch) {
+            alert(`Rescue mission ${updatedRequest.status}! Dashboard reset.`);
+          }
+          // Fetch pending requests to populate the list when the active trip ends
+          api.get("/emergency/pending")
+            .then(res => setPendingRequests(res.data.requests || []))
+            .catch(err => console.error("Error refreshing pending requests:", err));
         } else {
           setActiveTrip(updatedRequest);
+          setIsOnline(true);
+          setActiveTab("cockpit");
         }
+      } else if (activeTripRef.current && activeTripRef.current._id === updatedRequest._id) {
+        // If we were the driver, but the driver ID changed (meaning we got switched out)
+        setActiveTrip(null);
+        alert("The patient has re-routed the emergency request to another ambulance unit.");
+        // Fetch pending requests to populate the list when we get switched out
+        api.get("/emergency/pending")
+          .then(res => setPendingRequests(res.data.requests || []))
+          .catch(err => console.error("Error refreshing pending requests:", err));
       }
-    });
+    };
 
-    socket.on("emergencyAccepted", (updatedRequest) => {
+    const handleEmergencyAccepted = (updatedRequest) => {
       setPendingRequests(prev => prev.filter(r => r._id !== updatedRequest._id));
-      if (incomingRequestAlert && incomingRequestAlert._id === updatedRequest._id) {
+      if (incomingRequestAlertRef.current && incomingRequestAlertRef.current._id === updatedRequest._id) {
         setIncomingRequestAlert(null);
       }
-    });
+    };
 
-    socket.on("patientLocationUpdated", (locationData) => {
+    const handlePatientLocationUpdated = (locationData) => {
       console.log("Patient live location updated received:", locationData);
-      if (activeTrip && locationData.emergencyId === activeTrip._id) {
+      if (activeTripRef.current && locationData.emergencyId === activeTripRef.current._id) {
         setPatientLiveLocation({
           lat: locationData.lat,
           lng: locationData.lng
         });
       }
-    });
+    };
+
+    socket.on("emergencyRequest", handleEmergencyRequest);
+    socket.on("emergencyStatusUpdated", handleEmergencyStatusUpdated);
+    socket.on("emergencyAccepted", handleEmergencyAccepted);
+    socket.on("patientLocationUpdated", handlePatientLocationUpdated);
 
     return () => {
-      socket.off("emergencyRequest");
-      socket.off("emergencyStatusUpdated");
-      socket.off("emergencyAccepted");
-      socket.off("patientLocationUpdated");
+      socket.off("emergencyRequest", handleEmergencyRequest);
+      socket.off("emergencyStatusUpdated", handleEmergencyStatusUpdated);
+      socket.off("emergencyAccepted", handleEmergencyAccepted);
+      socket.off("patientLocationUpdated", handlePatientLocationUpdated);
     };
-  }, [isOnline, activeTrip, incomingRequestAlert]);
+  }, []);
 
   // Clear patient live location when active trip ends
   useEffect(() => {
@@ -443,7 +621,11 @@ function DriverDashboard() {
   const handleUpdateTripStatus = async (tripId, nextStatus) => {
     setLoading(true);
     try {
-      const res = await updateEmergencyStatus(tripId, nextStatus);
+      let customCoords = null;
+      if (nextStatus === "in_transit" && driverLocation) {
+        customCoords = [driverLocation.lng, driverLocation.lat];
+      }
+      const res = await updateEmergencyStatus(tripId, nextStatus, customCoords);
       const tripObj = res.request || res;
       
       if (nextStatus === "completed" || nextStatus === "cancelled") {
@@ -1063,7 +1245,7 @@ function DriverDashboard() {
                           <div className="space-y-1">
                             <h4 className="text-sm font-bold text-white capitalize flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                              {req.emergencyType.replace("_", " ")}
+                              {req.emergencyType.replaceAll("_", " ")}
                             </h4>
                             <p className="text-[10px] text-gray-500">
                               Incident logged: {new Date(req.createdAt).toLocaleTimeString()} • Patient: {req.patientId?.name || "Anonymous"}
@@ -1118,6 +1300,81 @@ function DriverDashboard() {
                       </div>
                     )}
                   </div>
+
+                  {/* Manual Location Update Card */}
+                  <div className="bg-[#161a23] border border-gray-800 p-6 rounded-2xl shadow-xl space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-white font-bold text-xs tracking-wider uppercase flex items-center gap-1.5">
+                        <FiMapPin className="text-blue-400" /> Location Controls
+                      </h3>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${
+                        isManualLocation 
+                          ? "bg-amber-500/10 border-amber-500/20 text-amber-400" 
+                          : "bg-green-500/10 border-green-500/20 text-green-400 animate-pulse"
+                      }`}>
+                        {isManualLocation ? "Manual Override Active" : "Auto GPS Active"}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#12141c] p-3 rounded-xl border border-gray-800/60 text-[10px]">
+                      <span className="text-gray-500 font-semibold block uppercase">Broadcast Location:</span>
+                      <span className="text-white font-bold font-mono mt-0.5 block">
+                        {driverLocation ? `${driverLocation.lat.toFixed(6)}, ${driverLocation.lng.toFixed(6)}` : "Offline/Unavailable"}
+                      </span>
+                    </div>
+                    
+                    <form onSubmit={handleManualLocationSubmit} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block text-gray-500 mb-1 font-semibold">Override Latitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 25.5948"
+                          value={manualLat}
+                          onChange={(e) => setManualLat(e.target.value)}
+                          className="w-full bg-[#1e2330] border border-gray-800 text-white rounded-xl py-2 px-3 focus:outline-none focus:border-blue-500 transition"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-500 mb-1 font-semibold">Override Longitude</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="e.g. 85.1376"
+                          value={manualLng}
+                          onChange={(e) => setManualLng(e.target.value)}
+                          className="w-full bg-[#1e2330] border border-gray-800 text-white rounded-xl py-2 px-3 focus:outline-none focus:border-blue-500 transition"
+                        />
+                      </div>
+                      
+                      <div className="flex flex-col gap-2 pt-1">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleGetDeviceLocation}
+                            className="flex-1 py-2 px-3 bg-[#1e2330] hover:bg-gray-800 border border-gray-800 text-white font-semibold rounded-xl text-[10px] transition cursor-pointer text-center"
+                          >
+                            Get Device GPS
+                          </button>
+                          <button
+                            type="submit"
+                            className="flex-1 py-2 px-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl text-[10px] transition cursor-pointer uppercase tracking-wider text-center"
+                          >
+                            Set Override
+                          </button>
+                        </div>
+                        {isManualLocation && (
+                          <button
+                            type="button"
+                            onClick={handleResetToGps}
+                            className="w-full py-2 px-3 bg-gradient-to-r from-red-600/10 to-red-700/10 hover:from-red-600/20 hover:to-red-700/20 border border-red-500/20 hover:border-red-500/30 text-red-400 font-bold rounded-xl text-[10px] transition cursor-pointer uppercase tracking-wider text-center"
+                          >
+                            Reset to Auto GPS
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
                 </div>
 
               </div>
@@ -1164,6 +1421,10 @@ function DriverDashboard() {
           onAccept={handleAcceptMission}
           loading={loading}
         />
+      )}
+
+      {activeTrip && (
+        <EmergencyChat emergencyRequestId={activeTrip._id} userRole="driver" />
       )}
     </div>
   );

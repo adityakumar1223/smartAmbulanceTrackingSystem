@@ -8,7 +8,8 @@ const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation, patientLive
     let nextStatus = "";
     if (trip.status === "accepted") nextStatus = "on_the_way";
     else if (trip.status === "on_the_way") nextStatus = "arrived";
-    else if (trip.status === "arrived") nextStatus = "completed";
+    else if (trip.status === "arrived") nextStatus = "in_transit";
+    else if (trip.status === "in_transit") nextStatus = "completed";
 
     if (nextStatus) {
       await onUpdateStatus(trip._id, nextStatus);
@@ -51,12 +52,12 @@ const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation, patientLive
               </div>
               <div className="flex justify-between border-b border-gray-800/40 pb-2">
                 <span className="text-gray-500">Priority Level:</span>
-                <span className="text-red-400 capitalize font-bold">{trip.emergencyType.replace("_", " ")}</span>
+                <span className="text-red-400 capitalize font-bold">{trip.emergencyType.replaceAll("_", " ")}</span>
               </div>
               <div className="space-y-1 pt-1">
                 <span className="text-gray-500 text-xs">Medical Symptoms:</span>
                 <p className="text-xs text-white italic bg-[#1e2330] p-3 rounded-lg border border-gray-800/50">
-                  "{trip.patientNotes || "No symptoms noted by dispatcher."}"
+                  &quot;{trip.patientNotes || 'No symptoms noted by dispatcher.'}&quot;
                 </p>
               </div>
             </div>
@@ -91,6 +92,12 @@ const ActiveTrip = ({ trip, onUpdateStatus, loading, driverLocation, patientLive
                   </>
                 )}
                 {trip.status === "arrived" && (
+                  <>
+                    <FiCheckSquare className="w-5 h-5" />
+                    <span>Board Patient (Hospital Transit)</span>
+                  </>
+                )}
+                {trip.status === "in_transit" && (
                   <>
                     <FiCheckSquare className="w-5 h-5" />
                     <span>Complete Rescue Mission</span>

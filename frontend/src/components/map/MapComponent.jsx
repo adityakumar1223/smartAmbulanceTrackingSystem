@@ -46,10 +46,12 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
         lng: Number(pickupLocation.coordinates[0])
      } : null;
 
-    const [ambulanceLocation, setAmbulanceLocation] = useState(driverLocation || {
-        lat: 25.591,
-        lng: 85.1376
-    });
+    const hospitalLocation = (dropoffLocation && Array.isArray(dropoffLocation.coordinates) && dropoffLocation.coordinates.length >= 2) ? {
+        lat: Number(dropoffLocation.coordinates[1]),
+        lng: Number(dropoffLocation.coordinates[0])
+    } : null;
+
+    const [ambulanceLocation, setAmbulanceLocation] = useState(driverLocation || null);
 
     // Bulletproof coordinate validation
     const hasValidAmbulanceCoords = ambulanceLocation && 
@@ -63,6 +65,12 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
         typeof patientLocation.lng === "number" && 
         !isNaN(patientLocation.lat) && 
         !isNaN(patientLocation.lng);
+
+    const hasValidHospitalCoords = hospitalLocation && 
+        typeof hospitalLocation.lat === "number" && 
+        typeof hospitalLocation.lng === "number" && 
+        !isNaN(hospitalLocation.lat) && 
+        !isNaN(hospitalLocation.lng);
 
     const [eta, setEta] = useState(null);
     const [distance, setDistance] = useState(null);
@@ -166,59 +174,54 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
         }
     }, [driverLocation]);
 
-    // ORS use effect
+    // Real road routing with OSRM, ORS, and simulated fallback
     useEffect(() => {
         const fetchRoute = async () => {
-            if (!hasValidPatientCoords || !hasValidAmbulanceCoords) return;
+            const isTransit = status === "in_transit" || status === "boarded";
+            const destination = isTransit ? hospitalLocation : patientLocation;
+            
+            const hasValidDestination = destination && 
+                typeof destination.lat === "number" && 
+                typeof destination.lng === "number" && 
+                !isNaN(destination.lat) && 
+                !isNaN(destination.lng);
+
+            if (!hasValidDestination || !hasValidAmbulanceCoords) return;
+
+            const startLat = ambulanceLocation.lat;
+            const startLng = ambulanceLocation.lng;
+            const endLat = destination.lat;
+            const endLng = destination.lng;
 
             const handleSimulatedRoute = () => {
-                const lat1 = ambulanceLocation.lat;
-                const lon1 = ambulanceLocation.lng;
-                const lat2 = patientLocation.lat;
-                const lon2 = patientLocation.lng;
-                
                 // Haversine formula
                 const R = 6371; // km
-                const dLat = (lat2 - lat1) * Math.PI / 180;
-                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const dLat = (endLat - startLat) * Math.PI / 180;
+                const dLon = (endLng - startLng) * Math.PI / 180;
                 const a = 
                     Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                    Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) * 
                     Math.sin(dLon/2) * Math.sin(dLon/2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                 const straightDistance = R * c;
-                
-                // Estimate driving distance (approx 1.3x straight-line distance)
                 const distanceKm = (straightDistance * 1.3).toFixed(2);
-                
-                // Estimate ETA: assuming 35 km/h average speed in emergency mode (approx 1.7 minutes per km)
                 const durationMin = Math.max(1, Math.round(distanceKm * 1.7));
                 
                 setDistance(distanceKm);
                 setEta(durationMin);
+                setTrafficLevel(durationMin <= 10 ? "Low" : durationMin <= 20 ? "Moderate" : "High");
                 
-                if (durationMin <= 10) {
-                    setTrafficLevel("Low");
-                } else if (durationMin <= 20) {
-                    setTrafficLevel("Moderate");
-                } else {
-                    setTrafficLevel("High");
-                }
-                
-                // Generate simulated multi-segment route coordinates to look realistic
                 const segments = 12;
                 const simulatedCoords = [];
                 for (let i = 0; i <= segments; i++) {
                     const t = i / segments;
-                    // Linear interpolation
-                    let lat = lat1 + (lat2 - lat1) * t;
-                    let lng = lon1 + (lon2 - lon1) * t;
+                    let lat = startLat + (endLat - startLat) * t;
+                    let lng = startLng + (endLng - startLng) * t;
                     
-                    // Add slight sine-wave curve for route realism instead of a dead-straight line
                     if (i > 0 && i < segments) {
-                        const offset = Math.sin(t * Math.PI) * 0.003; // ~300 meters max displacement
-                        const dx = lon2 - lon1;
-                        const dy = lat2 - lat1;
+                        const offset = Math.sin(t * Math.PI) * 0.003;
+                        const dx = endLng - startLng;
+                        const dy = endLat - startLat;
                         const len = Math.sqrt(dx*dx + dy*dy);
                         if (len > 0) {
                             lat += (-dx / len) * offset;
@@ -230,62 +233,62 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
                 setRouteCoordinates(simulatedCoords);
             };
 
+            // Option 1: Try free OSRM API (Real road network)
             try {
-                // Pre-check for empty/placeholder ORS API key
-                const apiKey = import.meta.env.VITE_ORS_API_KEY;
-                if (!apiKey || apiKey.includes("your_") || apiKey.length < 20) {
-                    console.log("No valid ORS API key found. Using simulated real-time routing engine.");
-                    handleSimulatedRoute();
-                    return;
-                }
-
                 const response = await fetch(
-                    `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${ambulanceLocation.lng},${ambulanceLocation.lat}&end=${patientLocation.lng},${patientLocation.lat}`   
+                    `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`
                 );
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+                        const route = data.routes[0];
+                        const distanceKm = (route.distance / 1000).toFixed(2);
+                        const durationMin = (route.duration / 60).toFixed(0);
 
-                if (!response.ok) {
-                    console.log("ORS server returned error code, shifting to simulated routing.");
-                    handleSimulatedRoute();
-                    return;
+                        setDistance(distanceKm);
+                        setEta(durationMin);
+                        setTrafficLevel(durationMin <= 10 ? "Low" : durationMin <= 20 ? "Moderate" : "High");
+
+                        const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        setRouteCoordinates(coordinates);
+                        return; // Success
+                    }
                 }
-
-                const data = await response.json();
-
-                if (!data || !data.features || data.features.length === 0) {
-                      console.log("No route coordinates in ORS payload. Shifting to simulated routing.");
-                      handleSimulatedRoute();
-                      return;
-                }
-
-                const summary = data.features[0].properties.summary;
-                const distanceKm = (summary.distance / 1000).toFixed(2);
-                const durationMin = (summary.duration / 60).toFixed(0);
-
-                setDistance(distanceKm);
-                setEta(durationMin);
-
-                if(durationMin <= 10){
-                    setTrafficLevel("Low");
-                }else if( durationMin <=20 ){
-                    setTrafficLevel("Moderate");
-                }else{
-                    setTrafficLevel("High");
-                }
-
-                const coordinates = data.features[0].geometry.coordinates.map(
-                    (coord) => [
-                        coord[1],
-                        coord[0],
-                    ]
-                );
-
-                setRouteCoordinates(coordinates);
-                
-            } catch (error) {
-                console.log("Failed to query OpenRouteService API. Invoking high-fidelity simulated engine fallback:", error);
-                handleSimulatedRoute();
+            } catch (osrmErr) {
+                console.warn("OSRM routing failed, trying OpenRouteService...", osrmErr);
             }
-            
+
+            // Option 2: Try ORS API (requires VITE_ORS_API_KEY)
+            try {
+                const apiKey = import.meta.env.VITE_ORS_API_KEY;
+                if (apiKey && !apiKey.includes("your_") && apiKey.length > 20) {
+                    const response = await fetch(
+                        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${startLng},${startLat}&end=${endLng},${endLat}`
+                    );
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.features && data.features.length > 0) {
+                            const summary = data.features[0].properties.summary;
+                            const distanceKm = (summary.distance / 1000).toFixed(2);
+                            const durationMin = (summary.duration / 60).toFixed(0);
+
+                            setDistance(distanceKm);
+                            setEta(durationMin);
+                            setTrafficLevel(durationMin <= 10 ? "Low" : durationMin <= 20 ? "Moderate" : "High");
+
+                            const coordinates = data.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                            setRouteCoordinates(coordinates);
+                            return; // Success
+                        }
+                    }
+                }
+            } catch (orsError) {
+                console.warn("ORS API routing failed...", orsError);
+            }
+
+            // Option 3: Fallback to simulated line
+            console.log("All real routing services failed. Using curved simulated fallback.");
+            handleSimulatedRoute();
         };
 
         fetchRoute();
@@ -295,8 +298,12 @@ function MapComponent({pickupLocation, driverLocation, dropoffLocation, status})
         ambulanceLocation?.lng,
         patientLocation?.lat,
         patientLocation?.lng,
+        hospitalLocation?.lat,
+        hospitalLocation?.lng,
         hasValidAmbulanceCoords,
-        hasValidPatientCoords
+        hasValidPatientCoords,
+        hasValidHospitalCoords,
+        status
     ]);
 
     return ( 

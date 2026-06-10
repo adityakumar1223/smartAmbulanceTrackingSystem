@@ -49,6 +49,8 @@ const emergencyRequestSchema = new mongoose.Schema({
             "accepted",
             "on_the_way",
             "arrived",
+            "boarded",
+            "in_transit",
             "completed",
             "cancelled"
         ],
@@ -60,6 +62,11 @@ const emergencyRequestSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+
+    notifiedDrivers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    }],
     
 }, {
     timestamps: true,

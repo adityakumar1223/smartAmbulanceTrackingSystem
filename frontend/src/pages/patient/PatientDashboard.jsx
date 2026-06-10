@@ -6,6 +6,7 @@ import EmergencyForm from "./EmergencyForm.jsx";
 import ActiveTripCard from "./ActiveTripCard.jsx";
 import { useEmergency } from "../../context/EmergencyContext";
 import { useAuth } from "../../context/AuthContext";
+import EmergencyChat from "../../components/chat/EmergencyChat.jsx";
 import api from "../../services/api.js";
 import socket from "../../socket/socket.js";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -14,7 +15,8 @@ import {
   FiActivity, FiUser, FiMapPin, FiPhoneCall, FiUsers, 
   FiAlertTriangle, FiPlus, FiThumbsUp, FiMessageCircle, FiSend, 
   FiImage, FiX, FiCheck, FiUserPlus, FiInfo, FiClock, FiSettings,
-  FiFileText, FiChevronRight, FiCheckCircle, FiCompass, FiMenu
+  FiFileText, FiChevronRight, FiCheckCircle, FiCompass, FiMenu,
+  FiUpload, FiTrash2, FiEye, FiFile
 } from "react-icons/fi";
 
 // Initial Seed Data for the Social Feed (matches standalone Community page)
@@ -190,24 +192,176 @@ function PatientDashboard() {
   // ----------------------------------------------------
   const [profileData, setProfileData] = useState(() => {
     const saved = localStorage.getItem("pat_profile");
-    return saved ? JSON.parse(saved) : {
-      bloodGroup: "O Positive (O+)",
-      insuranceId: "MAX-98234-UP",
-      allergies: "Penicillin, Sulfa drugs",
-      conditions: "Hypertension, Mild Asthma",
-      emergencyContactName: "Father (Ramesh Kumar)",
-      emergencyContactPhone: "+91 98765 43210"
+    const parsed = saved ? JSON.parse(saved) : null;
+    return {
+      bloodGroup: parsed?.bloodGroup || "",
+      insuranceId: parsed?.insuranceId || "",
+      allergies: parsed?.allergies || "",
+      conditions: parsed?.conditions || "",
+      emergencyContactName: parsed?.emergencyContactName || "",
+      emergencyContactPhone: parsed?.emergencyContactPhone || "",
+      medicalRecords: parsed?.medicalRecords || []
     };
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [tempProfile, setTempProfile] = useState({ ...profileData });
 
-  const handleSaveProfile = (e) => {
+  // Document upload/management states
+  const [recordTitle, setRecordTitle] = useState("");
+  const [recordDesc, setRecordDesc] = useState("");
+  const [recordFile, setRecordFile] = useState(null);
+  const [uploadingRecord, setUploadingRecord] = useState(false);
+  const [autoAnalyze, setAutoAnalyze] = useState(true);
+  const fileRecordInputRef = useRef(null);
+
+  // Fetch profile from backend on mount and when user changes
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get("/user/profile");
+        if (res.data && res.data.user) {
+          const u = res.data.user;
+          const updated = {
+            bloodGroup: u.bloodGroup || "",
+            insuranceId: u.insuranceId || "",
+            allergies: u.allergies || "",
+            conditions: u.conditions || "",
+            emergencyContactName: u.emergencyContactName || "",
+            emergencyContactPhone: u.emergencyContactPhone || "",
+            medicalRecords: u.medicalRecords || []
+          };
+          setProfileData(updated);
+          localStorage.setItem("pat_profile", JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+      }
+    };
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  // Sync tempProfile whenever edit mode is entered or profileData is updated
+  useEffect(() => {
+    if (isEditingProfile) {
+      setTempProfile({ ...profileData });
+    }
+  }, [isEditingProfile, profileData]);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    setProfileData(tempProfile);
-    localStorage.setItem("pat_profile", JSON.stringify(tempProfile));
-    setIsEditingProfile(false);
-    alert("Medical emergency ledger synchronized successfully!");
+    try {
+      const res = await api.put("/user/profile", tempProfile);
+      if (res.data && res.data.user) {
+        const u = res.data.user;
+        const updated = {
+          bloodGroup: u.bloodGroup || "",
+          insuranceId: u.insuranceId || "",
+          allergies: u.allergies || "",
+          conditions: u.conditions || "",
+          emergencyContactName: u.emergencyContactName || "",
+          emergencyContactPhone: u.emergencyContactPhone || "",
+          medicalRecords: u.medicalRecords || []
+        };
+        setProfileData(updated);
+        localStorage.setItem("pat_profile", JSON.stringify(updated));
+        setIsEditingProfile(false);
+        alert("Medical emergency ledger synchronized successfully!");
+      }
+    } catch (err) {
+      console.error("Failed to update profile:", err);
+      alert(err.response?.data?.message || "Failed to update profile");
+    }
+  };
+
+  const handleUploadRecord = async (e) => {
+    e.preventDefault();
+    if (!recordFile) {
+      alert("Please select a file to upload.");
+      return;
+    }
+    setUploadingRecord(true);
+    try {
+      const formData = new FormData();
+      formData.append("title", recordTitle);
+      formData.append("description", recordDesc);
+      formData.append("autoAnalyze", autoAnalyze ? "true" : "false");
+      formData.append("file", recordFile);
+
+      const res = await api.post("/user/medical-records", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data"
+        }
+      });
+      if (res.data && res.data.user) {
+        const u = res.data.user;
+        const updated = {
+          bloodGroup: u.bloodGroup || "",
+          insuranceId: u.insuranceId || "",
+          allergies: u.allergies || "",
+          conditions: u.conditions || "",
+          emergencyContactName: u.emergencyContactName || "",
+          emergencyContactPhone: u.emergencyContactPhone || "",
+          medicalRecords: u.medicalRecords || []
+        };
+        setProfileData(updated);
+        localStorage.setItem("pat_profile", JSON.stringify(updated));
+        // Reset form inputs
+        setRecordTitle("");
+        setRecordDesc("");
+        setRecordFile(null);
+        if (fileRecordInputRef.current) fileRecordInputRef.current.value = "";
+        alert("Medical document uploaded successfully!");
+      }
+    } catch (err) {
+      console.error("Failed to upload medical record:", err);
+      alert(err.response?.data?.message || "Failed to upload medical record");
+    } finally {
+      setUploadingRecord(false);
+    }
+  };
+
+  const handleDeleteRecord = async (recordId) => {
+    if (!window.confirm("Are you sure you want to delete this medical record?")) return;
+    try {
+      const res = await api.delete(`/user/medical-records/${recordId}`);
+      if (res.data && res.data.user) {
+        const u = res.data.user;
+        const updated = {
+          bloodGroup: u.bloodGroup || "",
+          insuranceId: u.insuranceId || "",
+          allergies: u.allergies || "",
+          conditions: u.conditions || "",
+          emergencyContactName: u.emergencyContactName || "",
+          emergencyContactPhone: u.emergencyContactPhone || "",
+          medicalRecords: u.medicalRecords || []
+        };
+        setProfileData(updated);
+        localStorage.setItem("pat_profile", JSON.stringify(updated));
+        alert("Medical record deleted successfully!");
+      }
+    } catch (err) {
+      console.error("Failed to delete medical record:", err);
+      alert(err.response?.data?.message || "Failed to delete medical record");
+    }
+  };
+
+  const handleViewRecord = (record) => {
+    try {
+      const dataUrl = `data:${record.fileType};base64,${record.fileData}`;
+      const newTab = window.open();
+      if (newTab) {
+        newTab.document.write(
+          `<iframe src="${dataUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`
+        );
+        newTab.document.title = record.title || "Medical Record";
+      } else {
+        alert("Pop-up blocker is enabled. Please allow pop-ups to view records.");
+      }
+    } catch (err) {
+      console.error("Failed to view record:", err);
+    }
   };
 
   // ----------------------------------------------------
@@ -1025,29 +1179,29 @@ function PatientDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-mono">
                   <div className="border border-gray-800/80 p-4 bg-[#1e2330]/20 rounded-2xl">
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Blood Group</span>
-                    <span className="text-sm font-black text-red-500">{profileData.bloodGroup}</span>
+                    <span className="text-sm font-black text-red-500">{profileData.bloodGroup || "Not Specified"}</span>
                   </div>
 
                   <div className="border border-gray-800/80 p-4 bg-[#1e2330]/20 rounded-2xl">
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Insurance Policy ID</span>
-                    <span className="text-sm font-black text-white">{profileData.insuranceId}</span>
+                    <span className="text-sm font-black text-white">{profileData.insuranceId || "Not Specified"}</span>
                   </div>
 
                   <div className="border border-gray-800/80 p-4 bg-[#1e2330]/20 rounded-2xl md:col-span-2">
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Pre-existing Medical Issues</span>
-                    <p className="text-xs font-bold text-gray-300">{profileData.conditions}</p>
+                    <p className="text-xs font-bold text-gray-300">{profileData.conditions || "None declared"}</p>
                   </div>
 
                   <div className="border border-gray-800/80 p-4 bg-[#1e2330]/20 rounded-2xl md:col-span-2">
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Known Drug Allergies</span>
-                    <p className="text-xs font-bold text-red-400/90">{profileData.allergies}</p>
+                    <p className="text-xs font-bold text-red-400/90">{profileData.allergies || "None declared"}</p>
                   </div>
 
                   <div className="border border-blue-900/40 p-4 bg-blue-950/10 rounded-2xl md:col-span-2 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] text-blue-400/80 uppercase tracking-widest font-bold block mb-1">Emergency SOS Contact (Family Broadcast)</span>
-                      <p className="text-xs font-black text-blue-100">{profileData.emergencyContactName}</p>
-                      <p className="text-sm font-black text-blue-300 mt-0.5">{profileData.emergencyContactPhone}</p>
+                      <p className="text-xs font-black text-blue-100">{profileData.emergencyContactName || "Not Specified"}</p>
+                      <p className="text-sm font-black text-blue-300 mt-0.5">{profileData.emergencyContactPhone || "Not Specified"}</p>
                     </div>
                     <span className="text-2xl animate-pulse">❤️</span>
                   </div>
@@ -1128,6 +1282,162 @@ function PatientDashboard() {
                   </div>
                 </form>
               )}
+            </div>
+
+            {/* Medical History & Documents Ledger */}
+            <div className="bg-[#161a23] border border-gray-800 rounded-3xl p-6 shadow-xl space-y-6">
+              <div className="border-b border-gray-800 pb-4 flex justify-between items-center">
+                <h3 className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                  <FiFile className="text-red-500" />
+                  <span>Medical History & Documents Ledger</span>
+                </h3>
+                <span className="text-[10px] font-mono text-gray-500">
+                  {profileData.medicalRecords?.length || 0} Records Secured
+                </span>
+              </div>
+
+              {/* Upload Document Form */}
+              <form onSubmit={handleUploadRecord} className="space-y-4 bg-[#1e2330]/30 border border-gray-800/60 p-4 rounded-2xl">
+                <h4 className="text-white font-bold text-[10px] uppercase tracking-wide">Upload New Medical Document</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-500 uppercase tracking-wider text-[9px] mb-1 font-mono">Document Title</label>
+                    <input
+                      type="text"
+                      placeholder={autoAnalyze ? "Optional — Grok AI will generate if empty" : "e.g. Cardiologist Report June 2026"}
+                      value={recordTitle}
+                      onChange={(e) => setRecordTitle(e.target.value)}
+                      required={!autoAnalyze}
+                      className="w-full bg-[#1e2330] border border-gray-800 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-red-500 font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-500 uppercase tracking-wider text-[9px] mb-1 font-mono">Document Description</label>
+                    <input
+                      type="text"
+                      placeholder={autoAnalyze ? "Optional — Grok AI will summarize if empty" : "Brief notes about this file..."}
+                      value={recordDesc}
+                      onChange={(e) => setRecordDesc(e.target.value)}
+                      className="w-full bg-[#1e2330] border border-gray-800 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-red-500 font-semibold"
+                    />
+                  </div>
+                </div>
+
+                {/* Auto Analyze Checkbox */}
+                <div className="flex items-center gap-2.5 bg-[#1e2330]/50 border border-gray-800/60 p-3.5 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="autoAnalyzeCheckbox"
+                    checked={autoAnalyze}
+                    onChange={(e) => setAutoAnalyze(e.target.checked)}
+                    className="w-4.5 h-4.5 rounded border-gray-800 bg-[#1e2330] text-red-500 focus:ring-red-500 focus:ring-opacity-25 accent-red-500 cursor-pointer"
+                  />
+                  <label htmlFor="autoAnalyzeCheckbox" className="text-[10px] text-gray-400 font-mono cursor-pointer select-none font-semibold">
+                    Automatically analyze document with Grok AI to extract title & summarize description
+                  </label>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-2 border-t border-gray-800/40">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      ref={fileRecordInputRef}
+                      onChange={(e) => setRecordFile(e.target.files[0])}
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileRecordInputRef.current.click()}
+                      className="flex items-center gap-2 py-2 px-4 bg-[#1e2330] hover:bg-[#252b3a] border border-gray-800 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                    >
+                      <FiUpload className="text-red-500 w-4 h-4" />
+                      <span>{recordFile ? recordFile.name : "Select Document (PDF, JPEG, PNG)"}</span>
+                    </button>
+                    {recordFile && (
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        ({(recordFile.size / (1024 * 1024)).toFixed(2)} MB)
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={uploadingRecord || !recordFile}
+                    className="flex items-center justify-center gap-2 py-2 px-6 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {uploadingRecord ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FiUpload className="w-3.5 h-3.5" />
+                        <span>Upload & Encrypt</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Uploaded Documents List */}
+              <div className="space-y-3">
+                <h4 className="text-white font-bold text-[10px] uppercase tracking-wide">Saved Clinical Records</h4>
+                
+                {!profileData.medicalRecords || profileData.medicalRecords.length === 0 ? (
+                  <div className="bg-[#1e2330]/20 border border-gray-800/40 p-6 rounded-2xl text-center">
+                    <FiFile className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">No clinical documents uploaded yet.</p>
+                    <p className="text-[10px] text-gray-600 mt-1">Upload prescriptions, medical history, or emergency cards to secure your profile.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-1">
+                    {profileData.medicalRecords.map((record) => (
+                      <div
+                        key={record._id || record.id}
+                        className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3.5 bg-[#1e2330]/40 border border-gray-800/50 hover:border-red-500/30 rounded-2xl transition duration-200 gap-3"
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl flex items-center justify-center text-md flex-shrink-0">
+                            📄
+                          </div>
+                          <div className="min-w-0">
+                            <h5 className="text-white font-bold text-xs truncate">{record.title}</h5>
+                            {record.description && (
+                              <p className="text-[10px] text-gray-400 mt-0.5 truncate">{record.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1.5 text-[8px] text-gray-500 font-mono">
+                              <span className="bg-[#1e2330] border border-gray-800 px-1 py-0.5 rounded font-bold uppercase truncate max-w-[120px]">{record.fileName}</span>
+                              <span>•</span>
+                              <span>{new Date(record.uploadedAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
+                          <button
+                            onClick={() => handleViewRecord(record)}
+                            className="flex items-center gap-1 py-1.5 px-3 bg-[#1e2330] hover:bg-[#252b3a] border border-gray-800 text-white font-bold rounded-lg text-[9px] uppercase transition cursor-pointer"
+                          >
+                            <FiEye className="w-3 h-3 text-red-500" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRecord(record._id || record.id)}
+                            className="flex items-center gap-1 py-1.5 px-3 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 text-red-400 font-bold rounded-lg text-[9px] uppercase transition cursor-pointer"
+                          >
+                            <FiTrash2 className="w-3 h-3" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Safety Information Box */}
@@ -1221,6 +1531,10 @@ function PatientDashboard() {
         )}
 
       </main>
+
+      {activeEmergency && (
+        <EmergencyChat emergencyRequestId={activeEmergency._id} userRole="patient" />
+      )}
     </div>
   );
 }

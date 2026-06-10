@@ -27,23 +27,27 @@ function AdminDashboard() {
   useEffect(() => {
     fetchRequests();
 
-    // Socket updates
-    socket.on("emergencyRequest", (newRequest) => {
+    // Socket updates — use named handlers so cleanup is scoped to this component
+    const handleNewRequest = (newRequest) => {
       setRequests(prev => [newRequest, ...prev]);
-    });
+    };
 
-    socket.on("emergencyStatusUpdated", (updatedRequest) => {
+    const handleStatusUpdated = (updatedRequest) => {
       setRequests(prev => prev.map(r => r._id === updatedRequest._id ? updatedRequest : r));
-    });
+    };
 
-    socket.on("emergencyAccepted", (updatedRequest) => {
+    const handleAccepted = (updatedRequest) => {
       setRequests(prev => prev.map(r => r._id === updatedRequest._id ? updatedRequest : r));
-    });
+    };
+
+    socket.on("emergencyRequest", handleNewRequest);
+    socket.on("emergencyStatusUpdated", handleStatusUpdated);
+    socket.on("emergencyAccepted", handleAccepted);
 
     return () => {
-      socket.off("emergencyRequest");
-      socket.off("emergencyStatusUpdated");
-      socket.off("emergencyAccepted");
+      socket.off("emergencyRequest", handleNewRequest);
+      socket.off("emergencyStatusUpdated", handleStatusUpdated);
+      socket.off("emergencyAccepted", handleAccepted);
     };
   }, []);
 
@@ -136,7 +140,7 @@ function AdminDashboard() {
                       <Marker key={req._id} position={[lat, lng]}>
                         <Popup>
                           <div className="text-xs space-y-1">
-                            <p className="font-bold text-red-500 capitalize">{req.emergencyType.replace("_", " ")}</p>
+                            <p className="font-bold text-red-500 capitalize">{req.emergencyType.replaceAll("_", " ")}</p>
                             <p className="text-gray-600">Patient: {req.patientId?.name || "Unknown"}</p>
                             <p className="text-gray-500 uppercase font-semibold">Status: {req.status}</p>
                           </div>
@@ -168,7 +172,7 @@ function AdminDashboard() {
                         : "bg-[#1e2330]/40 border-gray-800 text-gray-400 hover:border-gray-700"
                     }`}
                   >
-                    <span>{type.replace("_", " ")}</span>
+                    <span>{type.replaceAll("_", " ")}</span>
                     <span className="bg-[#1e2330] px-1.5 py-0.5 rounded text-[10px] text-gray-500 font-bold">
                       {type === "all" ? requests.length : requests.filter(r => r.status === type).length}
                     </span>
@@ -215,7 +219,7 @@ function AdminDashboard() {
                       <td className="py-4 px-4 font-mono font-bold text-gray-400">
                         #{req._id.substring(req._id.length - 8).toUpperCase()}
                       </td>
-                      <td className="py-4 px-4 font-bold text-white capitalize">{req.emergencyType.replace("_", " ")}</td>
+                      <td className="py-4 px-4 font-bold text-white capitalize">{req.emergencyType.replaceAll("_", " ")}</td>
                       <td className="py-4 px-4">{req.patientId?.name || "Anonymous"}</td>
                       <td className="py-4 px-4 text-green-400 font-semibold">{req.driverId?.name || req.assignedDriver?.name || "Waiting Claim"}</td>
                       <td className="py-4 px-4">
@@ -225,7 +229,7 @@ function AdminDashboard() {
                           req.status === "cancelled" ? "bg-red-500/10 border-red-500/20 text-red-400" :
                           "bg-blue-500/10 border-blue-500/20 text-blue-400"
                         }`}>
-                          {req.status.replace("_", " ")}
+                          {req.status.replaceAll("_", " ")}
                         </span>
                       </td>
                       <td className="py-4 px-4 text-gray-500">{new Date(req.createdAt).toLocaleString()}</td>

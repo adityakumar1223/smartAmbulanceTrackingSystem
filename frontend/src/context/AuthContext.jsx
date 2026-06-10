@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import api from "../services/api.js";
+import socket from "../socket/socket.js";
 
 const AuthContext = createContext();
 
@@ -24,6 +25,26 @@ export const AuthProvider = ({ children }) => {
     }
     setLoading(false);
   }, []);
+
+  // Sync user with socket server
+  useEffect(() => {
+    const uId = user?.id || user?._id;
+    if (!uId) return;
+
+    const handleConnect = () => {
+      socket.emit("register", uId);
+      console.log(`Socket re-registered user: ${uId}`);
+    };
+
+    if (socket.connected) {
+      handleConnect();
+    }
+
+    socket.on("connect", handleConnect);
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [user]);
 
   const login = async (email, password) => {
     setLoading(true);
@@ -60,6 +81,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("user");
+    localStorage.removeItem("activeEmergency");
     setUser(null);
   };
 

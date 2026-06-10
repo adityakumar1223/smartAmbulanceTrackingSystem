@@ -328,34 +328,37 @@ function HospitalDashboard() {
   useEffect(() => {
     fetchIncidents();
 
-    // Socket updates
-    socket.on("emergencyRequest", (newRequest) => {
+    const handleNewRequest = (newRequest) => {
       setRequests(prev => [newRequest, ...prev]);
-    });
+    };
 
-    socket.on("emergencyStatusUpdated", (updatedRequest) => {
+    const handleStatusUpdated = (updatedRequest) => {
       setRequests(prev => prev.map(r => r._id === updatedRequest._id ? updatedRequest : r));
-    });
+    };
 
-    socket.on("emergencyAccepted", (updatedRequest) => {
+    const handleAccepted = (updatedRequest) => {
       setRequests(prev => prev.map(r => r._id === updatedRequest._id ? updatedRequest : r));
-    });
+    };
 
-    // Real-time driver location updates
-    socket.on("driverLocationUpdated", (data) => {
+    const handleDriverLocation = (data) => {
       if (data && data.driverId) {
         setDriverLocations(prev => ({
           ...prev,
           [data.driverId]: { lat: data.lat, lng: data.lng, updatedAt: Date.now() }
         }));
       }
-    });
+    };
+
+    socket.on("emergencyRequest", handleNewRequest);
+    socket.on("emergencyStatusUpdated", handleStatusUpdated);
+    socket.on("emergencyAccepted", handleAccepted);
+    socket.on("driverLocationUpdated", handleDriverLocation);
 
     return () => {
-      socket.off("emergencyRequest");
-      socket.off("emergencyStatusUpdated");
-      socket.off("emergencyAccepted");
-      socket.off("driverLocationUpdated");
+      socket.off("emergencyRequest", handleNewRequest);
+      socket.off("emergencyStatusUpdated", handleStatusUpdated);
+      socket.off("emergencyAccepted", handleAccepted);
+      socket.off("driverLocationUpdated", handleDriverLocation);
     };
   }, []);
 
@@ -940,14 +943,14 @@ function HospitalDashboard() {
                               req.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
                               "bg-blue-500/10 border-blue-500/20 text-blue-400"
                             }`}>
-                              {(req.emergencyType || "medical_emergency").replace("_", " ")}
+                              {(req.emergencyType || "medical_emergency").replaceAll("_", " ")}
                             </span>
                           </div>
 
                           <div className="border-t border-gray-800/50 pt-2 text-[11px]">
                             <span className="text-gray-500 block mb-0.5 uppercase tracking-wide font-mono text-[8px]">Triage Condition Notes:</span>
                             <p className="text-gray-300 italic truncate font-medium">
-                              "{req.patientNotes || "No condition notes logged."}"
+                              &quot;{req.patientNotes || "No condition notes logged."}&quot;
                             </p>
                           </div>
                         </div>
@@ -1036,18 +1039,18 @@ function HospitalDashboard() {
                               req.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
                               "bg-blue-500/10 border-blue-500/20 text-blue-400"
                             }`}>
-                              {(req.emergencyType || "medical_emergency").replace("_", " ")}
+                              {(req.emergencyType || "medical_emergency").replaceAll("_", " ")}
                             </span>
                           </td>
                           <td className="py-4 px-4 font-semibold">{req.patientId?.name || "Anonymous Incident"}</td>
                           <td className="py-4 px-4">
                             <span className="flex items-center gap-1.5 text-blue-400 font-bold uppercase tracking-wider text-[10px]">
                               <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping"></span>
-                              {(req.status || "pending").replace("_", " ")}
+                              {(req.status || "pending").replaceAll("_", " ")}
                             </span>
                           </td>
                           <td className="py-4 px-4 max-w-xs truncate italic text-gray-400 hidden md:table-cell">
-                            "{req.patientNotes || "No condition notes logged."}"
+                            &quot;{req.patientNotes || "No condition notes logged."}&quot;
                           </td>
                           <td className="py-4 px-4 text-gray-500 hidden sm:table-cell">{new Date(req.createdAt).toLocaleTimeString()}</td>
                           <td className="py-4 px-4">
@@ -1101,7 +1104,7 @@ function HospitalDashboard() {
                         selectedTripForMap.emergencyType === "pregnancy" ? "bg-green-500/10 border-green-500/20 text-green-400" :
                         "bg-blue-500/10 border-blue-500/20 text-blue-400"
                       }`}>
-                        {(selectedTripForMap.emergencyType || "medical_emergency").replace("_", " ")}
+                        {(selectedTripForMap.emergencyType || "medical_emergency").replaceAll("_", " ")}
                       </span>
                     </div>
                     <div>

@@ -836,7 +836,7 @@ function Community() {
                             <div className="flex gap-2">
                               {/* Hazard Category Tag */}
                               <span className="px-2 py-0.5 bg-gray-500/10 border border-gray-800 text-gray-400 rounded-lg text-[9px] font-bold uppercase tracking-wider leading-none">
-                                {haz.type.replace("_", " ")}
+                                {haz.type.replaceAll("_", " ")}
                               </span>
                               
                               {/* Severity Badge */}

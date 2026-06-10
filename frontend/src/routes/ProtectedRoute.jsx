@@ -11,6 +11,16 @@ function ProtectedRoute({ children, allowedRole }) {
         return <Navigate to="/" replace />;
     }
 
+    // Show a neutral loader while AuthContext is still resolving — prevents
+    // flashing the "Access Denied" screen for valid users on first load.
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-[#0e1015]">
+                <div className="w-8 h-8 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
+            </div>
+        );
+    }
+
     // wrong role
     if (allowedRole && role !== allowedRole) {
         return (
